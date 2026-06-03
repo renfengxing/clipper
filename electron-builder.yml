@@ -11,9 +11,7 @@ asarUnpack:
   - '**/node_modules/ffmpeg-static/**'
 mac:
   target:
-    - target: dmg
-      arch:
-        - arm64
+    - dmg
   category: public.app-category.video
   # 本地自用：不做代码签名（要分发再配证书）
   identity: null
