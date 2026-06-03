@@ -1,0 +1,35 @@
+appId: com.footballclipper.app
+productName: 宽宽爸视频切片
+artifactName: KuankuanClipper-${version}-${arch}.${ext}
+directories:
+  output: dist
+files:
+  - out/**/*
+  - package.json
+# ffmpeg 是二进制，必须解出 asar 才能 spawn 执行
+asarUnpack:
+  - '**/node_modules/ffmpeg-static/**'
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.video
+  # 本地自用：不做代码签名（要分发再配证书）
+  identity: null
+dmg:
+  title: FootballClipper
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # 自用未签名
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - AppImage
+    - deb
+  category: AudioVideo
