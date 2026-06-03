@@ -14,6 +14,8 @@ jobs:
         include:
           - os: macos-latest
             script: dist:mac
+          - os: macos-13
+            script: dist:mac-x64
           - os: windows-latest
             script: dist:win
           - os: ubuntu-latest
