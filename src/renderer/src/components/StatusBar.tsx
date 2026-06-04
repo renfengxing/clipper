@@ -8,7 +8,7 @@ function clockOf(iso: string): string {
 }
 
 export function StatusBar(): JSX.Element {
-  const video = useStore((s) => s.video)
+  const hasVideo = useStore((s) => s.videos.length > 0)
   const savedAt = useStore((s) => s.savedAt)
   const [ffmpeg, setFfmpeg] = useState<{ ok: boolean; version: string } | null>(null)
 
@@ -19,11 +19,7 @@ export function StatusBar(): JSX.Element {
   return (
     <footer className="flex items-center justify-between px-4 h-7 bg-slate-950 border-t border-slate-800 text-xs text-slate-500 shrink-0">
       <span>
-        {!video
-          ? '就绪'
-          : savedAt
-            ? `已保存 ${clockOf(savedAt)}`
-            : '未保存'}
+        {!hasVideo ? '就绪' : savedAt ? `已保存 ${clockOf(savedAt)}` : '未保存'}
       </span>
       <span className="text-slate-600">
         {ffmpeg == null

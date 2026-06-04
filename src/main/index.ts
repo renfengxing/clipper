@@ -3,8 +3,8 @@ import { join, extname, basename } from 'path'
 import { createReadStream, statSync, existsSync, writeFileSync } from 'fs'
 import { Readable } from 'stream'
 import { readSettings, writeSettings, addRecentFile, type Settings } from './settings'
-import { loadProject, saveProject, type ProjectFile } from './project'
-import { ffmpegHealth, probeFps, exportClips, mergeClips, type ExportOptions, type MergeOptions } from './ffmpeg'
+import { loadProject, saveProject, fileExists, type ProjectFile } from './project'
+import { ffmpegHealth, probeVideo, exportClips, mergeClips, type ExportOptions, type MergeOptions } from './ffmpeg'
 import { cleanupTitle, autoTagClips, analyzeReport } from './ai'
 
 const isMac = process.platform === 'darwin'
@@ -239,16 +239,28 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('video:open-path', (_e, filePath: string) => openVideoFile(filePath))
 
-  // —— 项目文件 ——
-  ipcMain.handle('project:load', (_e, videoPath: string) => loadProject(videoPath))
-  ipcMain.handle('project:save', (_e, videoPath: string, data: ProjectFile) => {
-    saveProject(videoPath, data)
+  // —— 时间线工程文件（.kkclip）——
+  ipcMain.handle('project:load', (_e, path: string) => loadProject(path))
+  ipcMain.handle('project:save', (_e, path: string, data: ProjectFile) => {
+    saveProject(path, data)
     return { ok: true }
+  })
+  ipcMain.handle('fs:exists', (_e, path: string) => fileExists(path))
+
+  // 选择视频文件（可多选，用于"添加视频"）
+  ipcMain.handle('video:choose', async () => {
+    if (!mainWindow) return []
+    const r = await dialog.showOpenDialog(mainWindow, {
+      title: '添加视频',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: '视频', extensions: ['mp4', 'mov', 'm4v', 'MP4', 'MOV'] }]
+    })
+    return r.canceled ? [] : r.filePaths
   })
 
   // —— ffmpeg ——
   ipcMain.handle('ffmpeg:health', () => ffmpegHealth(readSettings()))
-  ipcMain.handle('video:probe-fps', (_e, path: string) => probeFps(path, readSettings()))
+  ipcMain.handle('video:probe', (_e, path: string) => probeVideo(path, readSettings()))
   ipcMain.handle('shell:open-path', (_e, p: string) => shell.openPath(p))
   ipcMain.handle('export:choose-dir', async () => {
     if (!mainWindow) return null

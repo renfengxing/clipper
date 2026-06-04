@@ -19,7 +19,7 @@ export function useGlobalShortcuts(): void {
     const onKey = (e: KeyboardEvent): void => {
       if (isTyping(e.target)) return
       const s = useStore.getState()
-      if (!s.video) return
+      if (s.videos.length === 0) return
       const kb = s.keybindings
       const code = e.code
 

@@ -19,6 +19,7 @@ const MAX_W = 640
 
 function App(): JSX.Element {
   const openVideoPath = useStore((s) => s.openVideoPath)
+  const addVideosFromPaths = useStore((s) => s.addVideosFromPaths)
   const closeVideo = useStore((s) => s.closeVideo)
   const setTitleTemplate = useStore((s) => s.setTitleTemplate)
   const setKeybindings = useStore((s) => s.setKeybindings)
@@ -54,13 +55,22 @@ function App(): JSX.Element {
   useEffect(() => window.api.onFullscreenChanged((full) => setIsFullscreen(full)), [setIsFullscreen])
   const toggleFullscreen = (): void => void window.api.toggleFullscreen()
 
-  const onDrop = (e: React.DragEvent): void => {
+  const onDrop = async (e: React.DragEvent): Promise<void> => {
     e.preventDefault()
     setDragging(false)
-    const file = Array.from(e.dataTransfer.files).find((f) => VIDEO_EXT.test(f.name))
-    if (!file) return
-    const path = window.api.getPathForFile(file)
-    if (path) openVideoPath(path)
+    const paths = Array.from(e.dataTransfer.files)
+      .filter((f) => VIDEO_EXT.test(f.name) || f.name.endsWith('.kkclip'))
+      .map((f) => window.api.getPathForFile(f))
+      .filter(Boolean)
+    if (paths.length === 0) return
+    // 已有时间线 → 追加；否则用第一个打开（.kkclip 则载入），其余追加
+    if (useStore.getState().videos.length > 0) {
+      await addVideosFromPaths(paths.filter((p) => !p.endsWith('.kkclip')))
+    } else {
+      await openVideoPath(paths[0])
+      const rest = paths.slice(1).filter((p) => !p.endsWith('.kkclip'))
+      if (rest.length) await addVideosFromPaths(rest)
+    }
   }
 
   // 拖动分隔条调列表宽度

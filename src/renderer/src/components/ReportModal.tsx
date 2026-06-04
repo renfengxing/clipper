@@ -5,7 +5,7 @@ export function ReportModal(): JSX.Element | null {
   const open = useStore((s) => s.reportOpen)
   const close = useStore((s) => s.closeReport)
   const clips = useStore((s) => s.clips)
-  const video = useStore((s) => s.video)
+  const timelineName = useStore((s) => s.timelineName)
 
   const [loading, setLoading] = useState(false)
   const [report, setReport] = useState('')
@@ -58,7 +58,7 @@ export function ReportModal(): JSX.Element | null {
               <button
                 className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm text-slate-200"
                 onClick={() => {
-                  const base = (video?.fileName || '视频').replace(/\.[^.]+$/, '')
+                  const base = timelineName || '视频'
                   void window.api.saveReport(report, `${base}_分析报告.md`)
                 }}
               >

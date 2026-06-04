@@ -2,27 +2,16 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store/useStore'
 import type { ExportProgress } from '../types'
 import { APP_NAME } from '../constants'
-
-function dirOf(path: string): string {
-  const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return i >= 0 ? path.slice(0, i) : path
-}
-
-function stripExt(name: string): string {
-  return name.replace(/\.[^./\\]+$/, '')
-}
-
-/** #65：源视频目录下、与视频同名的子文件夹 */
-function clipsFolder(videoPath: string, fileName: string): string {
-  return dirOf(videoPath) + '/' + stripExt(fileName)
-}
+import { dirOf } from '../utils/media'
+import { ordered } from '../utils/timeline'
 
 export function ExportModal(): JSX.Element | null {
   const open = useStore((s) => s.exportOpen)
   const close = useStore((s) => s.closeExport)
   const clips = useStore((s) => s.clips)
   const checkedIds = useStore((s) => s.checkedIds)
-  const video = useStore((s) => s.video)
+  const videos = useStore((s) => s.videos)
+  const timelineName = useStore((s) => s.timelineName)
   const exportHistory = useStore((s) => s.exportHistory)
   const lastExportDir = useStore((s) => s.lastExportDir)
   const setExportHistory = useStore((s) => s.setExportHistory)
@@ -55,13 +44,17 @@ export function ExportModal(): JSX.Element | null {
     return window.api.onExportProgress((p) => setProgress(p))
   }, [])
 
-  if (!open || !video) return null
+  if (!open || videos.length === 0) return null
 
-  // 只导出勾选的片段；未勾选则导出全部（#69）
+  const videoById = (id: string): (typeof videos)[number] | undefined => videos.find((v) => v.id === id)
+  // 只导出勾选的片段；未勾选则导出全部（#69），按视频顺序+局部入点排序
   const toExport = (checkedIds.length > 0 ? clips.filter((c) => checkedIds.includes(c.id)) : clips)
     .slice()
-    .sort((a, b) => a.in - b.in)
-  const outDir = dirMode === 'same' ? clipsFolder(video.path, video.fileName) : customDir
+    .sort((a, b) => (videoById(a.videoId)?.order ?? 0) - (videoById(b.videoId)?.order ?? 0) || a.in - b.in)
+  // 默认输出目录：第一个视频所在文件夹下、以时间线名命名的子文件夹
+  const firstDir = dirOf(ordered(videos)[0]?.path || '')
+  const sameDir = firstDir + '/' + (timelineName || '导出')
+  const outDir = dirMode === 'same' ? sameDir : customDir
 
   const pickDir = async (): Promise<void> => {
     const d = await window.api.chooseExportDir()
@@ -79,12 +72,16 @@ export function ExportModal(): JSX.Element | null {
     setRunning(true)
     setSummary(null)
     const res = await window.api.exportClips({
-      sourcePath: video.path,
       outDir,
       skipExisting,
       priorExports: exportHistory,
       watermark: watermark ? APP_NAME : undefined,
-      clips: toExport.map((c) => ({ in: c.in, out: c.out, title: c.title, tags: c.tags }))
+      clips: toExport
+        .map((c) => {
+          const v = videoById(c.videoId)
+          return v ? { sourcePath: v.path, in: c.in, out: c.out, title: c.title, tags: c.tags } : null
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
     })
     setSummary({ exported: res.exported, skipped: res.skipped, failed: res.failed })
     setExportHistory(res.exports) // 记录已导出（增量导出去重，#4）
@@ -112,7 +109,7 @@ export function ExportModal(): JSX.Element | null {
             onChange={() => setDirMode('same')}
             disabled={running}
           />
-          源视频目录下新建「{stripExt(video.fileName)}」同名文件夹
+          源目录下新建「{timelineName || '导出'}」文件夹
         </label>
         <label className="flex items-center gap-2 mb-1 text-sm text-slate-200 cursor-pointer">
           <input

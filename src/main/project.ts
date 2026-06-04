@@ -1,16 +1,24 @@
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'fs'
 
-/** 项目文件结构（规格 7.1） */
+/** 时间线工程文件 .kkclip（v2，多视频）。注意 videos 存 path，不存 url（url 由渲染层重建）。 */
 export interface ProjectFile {
   version: string
   app_name?: string
-  source_video: string
-  video_duration: number
+  name: string
   created_at: string
   updated_at: string
-  title_template: string
+  title_template?: string
+  videos: Array<{
+    id: string
+    path: string
+    fileName: string
+    duration: number
+    fps: number
+    order: number
+  }>
   clips: Array<{
     id: string
+    videoId: string
     in: number
     out: number
     title: string
@@ -18,34 +26,29 @@ export interface ProjectFile {
     created_at: string
     tags?: string[]
   }>
-  /** 上次导出目录（规格外·记住目录） */
-  last_export_dir?: string | null
-  /** 导出记录：key=`${标题}|${入点}` → 文件名（增量导出去重） */
-  exports?: Record<string, string>
-  /** 本视频的标签列表（#57） */
   video_tags?: string[]
+  last_export_dir?: string | null
+  exports?: Record<string, string>
 }
 
-/** 与源视频同目录：<视频名>.kkfb.json */
-export function projectPathFor(videoPath: string): string {
-  return videoPath + '.kkfb.json'
-}
-
-export function loadProject(videoPath: string): ProjectFile | null {
-  const p = projectPathFor(videoPath)
-  if (!existsSync(p)) return null
+/** 通用读取（.kkclip 或旧 .kkfb.json），返回解析后的对象，损坏/不存在则 null。迁移由渲染层判断 shape。 */
+export function loadProject(path: string): unknown | null {
+  if (!existsSync(path)) return null
   try {
-    return JSON.parse(readFileSync(p, 'utf-8')) as ProjectFile
+    return JSON.parse(readFileSync(path, 'utf-8'))
   } catch {
-    return null // 损坏文件忽略，不覆盖（交由后续保存重建）
+    return null
   }
 }
 
-/** 临时文件 + 原子 rename，避免崩溃损坏 JSON（规格 八·容灾） */
-export function saveProject(videoPath: string, data: ProjectFile): string {
-  const p = projectPathFor(videoPath)
-  const tmp = p + '.tmp'
+/** 临时文件 + 原子 rename 写盘（容灾） */
+export function saveProject(path: string, data: ProjectFile): string {
+  const tmp = path + '.tmp'
   writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8')
-  renameSync(tmp, p)
-  return p
+  renameSync(tmp, path)
+  return path
+}
+
+export function fileExists(path: string): boolean {
+  return existsSync(path)
 }

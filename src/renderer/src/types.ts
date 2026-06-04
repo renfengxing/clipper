@@ -1,36 +1,49 @@
-/** 一个标记片段 —— 对应规格文档 7.1 的 clips[] 元素 */
+/** 时间线里的一个源视频（多视频，P0-P7） */
+export interface SourceVideo {
+  id: string // 稳定 uuid，clip.videoId 引用它（文件移动只改 path 不动 id）
+  path: string // 源文件绝对路径（加载/导出/合并的依据，必须存盘）
+  fileName: string
+  url: string // media:// 地址
+  duration: number // 时长（秒），由主进程 ffmpeg 探测
+  fps: number // 帧率
+  order: number // 在时间线中的顺序
+  missing?: boolean // 文件缺失（路径不存在）
+}
+
+/** 一个标记片段 —— in/out 是相对所属视频的局部时间 */
 export interface Clip {
   id: string
-  in: number // 入点（秒）
-  out: number // 出点（秒）
+  videoId: string // 所属源视频（P0-P7）
+  in: number // 入点（秒，局部）
+  out: number // 出点（秒，局部）
   title: string
   order: number
   created_at: string
-  tags?: string[] // 标签（#46）
+  tags?: string[]
 }
 
-/** 项目文件结构（规格 7.1） */
+/** 时间线工程文件 .kkclip（v2，多视频） */
 export interface ProjectData {
   version: string
   app_name?: string
-  source_video: string
-  video_duration: number
+  name: string // 时间线显示名
   created_at: string
   updated_at: string
-  title_template: string
+  title_template?: string
+  videos: SourceVideo[]
   clips: Clip[]
+  video_tags?: string[]
   last_export_dir?: string | null
   exports?: Record<string, string>
-  video_tags?: string[]
 }
 
 /** 可配置快捷键（存 e.code，规格外 #23） */
 export interface Keybindings {
-  speedUp: string // 快进
-  speedDown: string // 快退
-  reset: string // 重置正常速度
-  mark: string // 标起点/终点（切换）
-  playPause: string // 暂停/继续
+  speedUp: string
+  speedDown: string
+  reset: string
+  mark: string
+  playPause: string
 }
 
 export const DEFAULT_KEYBINDINGS: Keybindings = {
@@ -48,18 +61,4 @@ export interface ExportProgress {
   name: string
   status: 'running' | 'done' | 'skipped' | 'failed'
   error?: string
-}
-
-/** 当前加载的视频信息 */
-export interface VideoState {
-  /** 源文件绝对路径 */
-  path: string
-  /** 文件名（用于标题栏与项目文件命名） */
-  fileName: string
-  /** media:// 协议地址，可直接喂给 <video src> */
-  url: string
-  /** 时长（秒），加载元数据后填入 */
-  duration: number
-  /** 帧率（fps），打开后由主进程探测；未知时按 30 兜底 */
-  fps: number
 }

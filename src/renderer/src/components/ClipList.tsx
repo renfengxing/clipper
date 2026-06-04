@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../store/useStore'
 import { fmtClock } from '../utils/time'
+import { ordered, clipGlobalIn } from '../utils/timeline'
 
 interface Props {
   width: number
@@ -9,6 +10,7 @@ interface Props {
 
 export function ClipList({ width, onCollapse }: Props): JSX.Element {
   const clips = useStore((s) => s.clips)
+  const videos = useStore((s) => s.videos)
   const selectedClipId = useStore((s) => s.selectedClipId)
   const selectClip = useStore((s) => s.selectClip)
   const updateClipTitle = useStore((s) => s.updateClipTitle)
@@ -52,8 +54,10 @@ export function ClipList({ width, onCollapse }: Props): JSX.Element {
     }
   }
 
-  // 默认按入点时间排序（#42）
-  let visible = [...clips].sort((a, b) => a.in - b.in)
+  // 默认按全局入点时间排序（跨多视频，#42）
+  const videoIndex: Record<string, number> = {}
+  ordered(videos).forEach((v, i) => (videoIndex[v.id] = i + 1))
+  let visible = [...clips].sort((a, b) => clipGlobalIn(videos, a) - clipGlobalIn(videos, b))
   if (activeTags.length > 0) {
     visible = visible.filter((c) => (c.tags || []).some((t) => activeTags.includes(t)))
   }
@@ -226,9 +230,16 @@ export function ClipList({ width, onCollapse }: Props): JSX.Element {
                     )}
                   </div>
 
-                  <div className="pl-11 mt-0.5 text-xs text-slate-500 tabular-nums">
-                    {fmtClock(c.in)} - {fmtClock(c.out)}
-                    <span className="ml-2 text-slate-600">({(c.out - c.in).toFixed(1)}s)</span>
+                  <div className="pl-11 mt-0.5 text-xs text-slate-500 tabular-nums flex items-center gap-2">
+                    {videos.length > 1 && videoIndex[c.videoId] && (
+                      <span className="px-1 rounded bg-slate-700 text-slate-300 text-[10px]" title="来源视频">
+                        🎞{videoIndex[c.videoId]}
+                      </span>
+                    )}
+                    <span>
+                      {fmtClock(c.in)} - {fmtClock(c.out)}
+                      <span className="ml-2 text-slate-600">({(c.out - c.in).toFixed(1)}s)</span>
+                    </span>
                   </div>
 
                   {/* 已有标签 chips */}

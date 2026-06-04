@@ -1,19 +1,44 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useStore } from '../store/useStore'
+import { useStore, selectActiveVideo } from '../store/useStore'
 import { fmtPrecise, fmtMs } from '../utils/time'
 import { keyLabel } from '../utils/keys'
-
-function baseName(p: string): string {
-  const parts = p.split(/[/\\]/)
-  return parts[parts.length - 1] || p
-}
+import { localToGlobal } from '../utils/timeline'
+import { basename } from '../utils/media'
 
 interface Props {
   isFullscreen: boolean
   onToggleFullscreen: () => void
 }
 
-/** 标记起点后、未标终点时，视频中央显示半透明提示（#44） */
+/** 字幕层（#75/#84）：画面中央半透明显示当前命中片段的标题 */
+function Subtitle(): JSX.Element | null {
+  const on = useStore((s) => s.subtitleOn)
+  const clips = useStore((s) => s.clips)
+  const videos = useStore((s) => s.videos)
+  const currentTime = useStore((s) => s.currentTime)
+  if (!on) return null
+  const active = clips.filter((c) => {
+    const gin = localToGlobal(videos, c.videoId, c.in)
+    const gout = localToGlobal(videos, c.videoId, c.out)
+    return currentTime >= gin && currentTime <= gout && c.title
+  })
+  if (active.length === 0) return null
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
+      {active.map((c) => (
+        <div
+          key={c.id}
+          className="text-white/45 text-xl font-medium text-center px-4"
+          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}
+        >
+          {c.title}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** 标记起点后、未标终点时，中央半透明提示（#44） */
 function MarkingOverlay(): JSX.Element | null {
   const markIn = useStore((s) => s.markIn)
   const markOut = useStore((s) => s.markOut)
@@ -28,16 +53,14 @@ function MarkingOverlay(): JSX.Element | null {
         <div className="text-base tabular-nums">
           当前 {fmtMs(currentTime)}（已 {(currentTime - markIn).toFixed(2)}s）
         </div>
-        <div className="mt-2 text-xs text-white/40">
-          再按 {keyLabel(markKey)} 键，或点 ] 按钮，标终点
-        </div>
+        <div className="mt-2 text-xs text-white/40">再按 {keyLabel(markKey)} 键，或点 ] 按钮，标终点</div>
         <div className="text-xs text-white/40">按 Esc 退出标记片段</div>
       </div>
     </div>
   )
 }
 
-/** 左下角半透明快捷键提示（#67） */
+/** 左下角半透明快捷键提示（#67/#73） */
 function HotkeyHint(): JSX.Element {
   const kb = useStore((s) => s.keybindings)
   const item = (k: string, label: string): JSX.Element => (
@@ -61,38 +84,14 @@ function HotkeyHint(): JSX.Element {
   )
 }
 
-/** 字幕层（#75/#84）：开关打开时，把当前时间命中的片段标题在画面中央以半透明字幕显示，不抢眼 */
-function Subtitle(): JSX.Element | null {
-  const on = useStore((s) => s.subtitleOn)
-  const clips = useStore((s) => s.clips)
-  const currentTime = useStore((s) => s.currentTime)
-  if (!on) return null
-  const active = clips
-    .filter((c) => currentTime >= c.in && currentTime <= c.out && c.title)
-    .sort((a, b) => a.in - b.in)
-  if (active.length === 0) return null
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
-      {active.map((c) => (
-        <div
-          key={c.id}
-          className="text-white/45 text-xl font-medium text-center px-4"
-          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}
-        >
-          {c.title}
-        </div>
-      ))}
-    </div>
-  )
-}
-
 export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.Element {
-  const video = useStore((s) => s.video)
-  const setDuration = useStore((s) => s.setDuration)
-  const setCurrentTime = useStore((s) => s.setCurrentTime)
+  const active = useStore(selectActiveVideo)
+  const videos = useStore((s) => s.videos)
   const setVideoEl = useStore((s) => s.setVideoEl)
+  const applyPendingSeek = useStore((s) => s.applyPendingSeek)
+  const syncLocalTime = useStore((s) => s.syncLocalTime)
+  const onVideoEnded = useStore((s) => s.onVideoEnded)
   const togglePlay = useStore((s) => s.togglePlay)
-  const pause = useStore((s) => s.pause)
   const deselectClip = useStore((s) => s.deselectClip)
   const openVideoPath = useStore((s) => s.openVideoPath)
   const closeVideo = useStore((s) => s.closeVideo)
@@ -101,20 +100,20 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
 
   const [recent, setRecent] = useState<string[]>([])
   useEffect(() => {
-    if (!video) window.api.getRecentFiles().then(setRecent)
-  }, [video])
+    if (videos.length === 0) window.api.getRecentFiles().then(setRecent)
+  }, [videos.length])
 
-  if (!video) {
+  if (videos.length === 0 || !active) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-black text-slate-500 gap-5">
         <div className="text-center">
           <div className="text-5xl mb-3">🎬</div>
-          <div className="text-sm">拖入视频，或通过菜单「文件 → 打开视频」加载比赛视频</div>
-          <div className="text-xs mt-1 text-slate-600">支持 mp4 / mov</div>
+          <div className="text-sm">拖入视频（可多选），或菜单「文件 → 打开视频」</div>
+          <div className="text-xs mt-1 text-slate-600">多个视频会按顺序拼成一条时间线</div>
         </div>
         {recent.length > 0 && (
-          <div className="w-[420px] max-w-[80%]">
-            <div className="text-xs text-slate-600 mb-1.5 px-1">最近打开</div>
+          <div className="w-[440px] max-w-[80%]">
+            <div className="text-xs text-slate-600 mb-1.5 px-1">最近的时间线</div>
             <ul className="rounded border border-slate-800 divide-y divide-slate-800 overflow-hidden">
               {recent.map((p) => (
                 <li key={p}>
@@ -123,7 +122,7 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
                     title={p}
                     onClick={() => openVideoPath(p)}
                   >
-                    🎞 {baseName(p)}
+                    🎞 {basename(p)}
                   </button>
                 </li>
               ))}
@@ -142,7 +141,7 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
 
       <button
         className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-900/70 hover:bg-red-600/80 text-slate-200 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-        title="关闭当前视频"
+        title="关闭当前时间线"
         onClick={(e) => {
           e.stopPropagation()
           closeVideo()
@@ -153,13 +152,13 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
 
       <video
         ref={refCb}
-        src={video.url}
+        src={active.url}
         className="max-h-full max-w-full"
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onEnded={() => pause()}
+        onLoadedMetadata={() => applyPendingSeek()}
+        onTimeUpdate={(e) => syncLocalTime(e.currentTarget.currentTime)}
+        onEnded={() => onVideoEnded()}
         onClick={() => {
-          deselectClip() // 点画面取消片段选中（焦点回到视频）
+          deselectClip()
           togglePlay()
         }}
       />

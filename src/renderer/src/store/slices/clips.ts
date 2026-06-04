@@ -1,8 +1,8 @@
 import type { StateCreator } from 'zustand'
 import type { Clip } from '../../types'
 import type { AppState, ClipsSlice } from '../types'
+import { globalToLocal, localToGlobal, videoOffset } from '../../utils/timeline'
 
-/** 标题去重：已存在则自动加 _02 _03（空标题允许重复，代表未命名） */
 function uniqueTitle(title: string, existing: string[]): string {
   if (!title) return ''
   const set = new Set(existing)
@@ -26,12 +26,12 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
 
   setMarkIn: () => {
     set({ markIn: get().currentTime })
-    if (!get().playing) get().play() // 暂停时标记起点 → 自动开始播放
+    if (!get().playing) get().play()
   },
 
   setMarkOut: () => {
     set({ markOut: get().currentTime })
-    if (get().markIn != null) get().openTitleModal() // 标完出点自动弹命名框
+    if (get().markIn != null) get().openTitleModal()
   },
 
   clearMarks: () => set({ markIn: null, markOut: null, titleModalOpen: false }),
@@ -39,11 +39,10 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
   openTitleModal: () => {
     const { markIn, markOut, playing } = get()
     if (markIn == null || markOut == null) return
-    get().pause() // 命名时暂停，记住之前是否在播放
+    get().pause()
     set({ titleModalOpen: true, resumeAfterModal: playing })
   },
 
-  // 取消命名 = 未设定终点：清出点、保留入点，继续等待按 N（#24）
   closeTitleModal: () => {
     const resume = get().resumeAfterModal
     set({ markOut: null, titleModalOpen: false, resumeAfterModal: false })
@@ -53,20 +52,28 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
   addClip: (title, tags) => {
     const t = title.trim()
     if (!t) {
-      get().closeTitleModal() // 空标题视为取消（#24）
+      get().closeTitleModal()
       return
     }
-    const { markIn, markOut, clips, resumeAfterModal, videoTags } = get()
+    const { markIn, markOut, clips, resumeAfterModal, videoTags, videos } = get()
     if (markIn == null || markOut == null) return
     const lo = Math.min(markIn, markOut)
     const hi = Math.max(markIn, markOut)
+    const loc = globalToLocal(videos, lo)
+    if (!loc) return
+    const offset = videoOffset(videos, loc.video.id)
+    const inLocal = lo - offset
+    // 片段不能跨文件：出点钳到所属视频末尾
+    const outLocal = Math.min(hi - offset, loc.video.duration || hi - offset)
+    if (outLocal - inLocal < 0.02) return // 太短或跨界
     const cleanTags = Array.from(
       new Set((tags || []).map((x) => x.trim().slice(0, 15)).filter(Boolean))
     )
     const clip: Clip = {
       id: crypto.randomUUID(),
-      in: lo,
-      out: hi,
+      videoId: loc.video.id,
+      in: inLocal,
+      out: outLocal,
       title: uniqueTitle(t, clips.map((c) => c.title)),
       order: clips.length,
       created_at: new Date().toISOString(),
@@ -74,7 +81,7 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     }
     set({
       clips: [...clips, clip],
-      videoTags: Array.from(new Set([...videoTags, ...cleanTags])), // 新标签并入视频标签
+      videoTags: Array.from(new Set([...videoTags, ...cleanTags])),
       markIn: null,
       markOut: null,
       titleModalOpen: false,
@@ -83,23 +90,22 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     if (resumeAfterModal) get().resume()
   },
 
-  // 选中即从入点播放，且只播放片段内容（到出点自动暂停，#27）
+  // 选中即从入点播放，到出点自动暂停（全局时间，跨文件）
   selectClip: (id) => {
-    const { clips, videoEl } = get()
+    const { clips, videos } = get()
     const clip = clips.find((c) => c.id === id)
-    if (!clip || !videoEl) return
-    get().pause() // 取消倒放 rAF
-    videoEl.currentTime = clip.in
-    videoEl.playbackRate = 1
-    void videoEl.play()
-    set({
-      selectedClipId: id,
-      currentTime: clip.in,
-      playing: true,
-      direction: 'forward',
-      rate: 1,
-      previewEnd: clip.out
-    })
+    if (!clip) return
+    const globalIn = localToGlobal(videos, clip.videoId, clip.in)
+    const globalOut = localToGlobal(videos, clip.videoId, clip.out)
+    get().pause()
+    set({ selectedClipId: id })
+    get().seek(globalIn)
+    set({ previewEnd: globalOut, playing: true, direction: 'forward', rate: 1 })
+    const el = get().videoEl
+    if (el) {
+      el.playbackRate = 1
+      void el.play()
+    }
   },
 
   deselectClip: () => set({ selectedClipId: null }),
@@ -111,11 +117,15 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
       return { clips: s.clips.map((c) => (c.id === id ? { ...c, title: unique } : c)) }
     }),
 
-  updateClipTimes: (id, inSec, outSec) =>
+  // in/out 为局部时间，钳到所属视频时长内
+  updateClipTimes: (id, inLocal, outLocal) =>
     set((s) => {
-      const dur = s.video?.duration || 0
-      const lo = Math.max(0, Math.min(inSec, outSec))
-      const hi = Math.min(dur > 0 ? dur : Math.max(inSec, outSec), Math.max(inSec, outSec))
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return {}
+      const v = s.videos.find((x) => x.id === clip.videoId)
+      const dur = v?.duration || 0
+      const lo = Math.max(0, Math.min(inLocal, outLocal))
+      const hi = Math.min(dur > 0 ? dur : Math.max(inLocal, outLocal), Math.max(inLocal, outLocal))
       return { clips: s.clips.map((c) => (c.id === id ? { ...c, in: lo, out: hi } : c)) }
     }),
 
@@ -123,21 +133,5 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     set((s) => ({
       clips: s.clips.filter((c) => c.id !== id).map((c, i) => ({ ...c, order: i })),
       selectedClipId: s.selectedClipId === id ? null : s.selectedClipId
-    })),
-
-  reorderClips: (from, to) =>
-    set((s) => {
-      if (from === to || from < 0 || to < 0 || from >= s.clips.length || to >= s.clips.length) {
-        return {}
-      }
-      const arr = [...s.clips]
-      const [moved] = arr.splice(from, 1)
-      arr.splice(to, 0, moved)
-      return { clips: arr.map((c, i) => ({ ...c, order: i })) }
-    }),
-
-  sortClipsByTime: () =>
-    set((s) => ({
-      clips: [...s.clips].sort((a, b) => a.in - b.in).map((c, i) => ({ ...c, order: i }))
     }))
 })

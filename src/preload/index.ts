@@ -22,13 +22,21 @@ export interface Settings {
 export interface ProjectFile {
   version: string
   app_name?: string
-  source_video: string
-  video_duration: number
+  name: string
   created_at: string
   updated_at: string
-  title_template: string
+  title_template?: string
+  videos: Array<{
+    id: string
+    path: string
+    fileName: string
+    duration: number
+    fps: number
+    order: number
+  }>
   clips: Array<{
     id: string
+    videoId: string
     in: number
     out: number
     title: string
@@ -36,9 +44,9 @@ export interface ProjectFile {
     created_at: string
     tags?: string[]
   }>
+  video_tags?: string[]
   last_export_dir?: string | null
   exports?: Record<string, string>
-  video_tags?: string[]
 }
 
 export interface ExportProgress {
@@ -49,10 +57,17 @@ export interface ExportProgress {
   error?: string
 }
 
-export interface ExportOptions {
+export interface ExportClipInput {
   sourcePath: string
+  in: number
+  out: number
+  title: string
+  tags?: string[]
+}
+
+export interface ExportOptions {
   outDir: string
-  clips: Array<{ in: number; out: number; title: string; tags?: string[] }>
+  clips: ExportClipInput[]
   skipExisting: boolean
   priorExports?: Record<string, string>
   watermark?: string
@@ -113,25 +128,26 @@ const api = {
   openVideoPath: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('video:open-path', filePath),
 
-  // —— 项目文件 ——
-  loadProject: (videoPath: string): Promise<ProjectFile | null> =>
-    ipcRenderer.invoke('project:load', videoPath),
-  saveProject: (videoPath: string, data: ProjectFile): Promise<{ ok: boolean }> =>
-    ipcRenderer.invoke('project:save', videoPath, data),
+  // —— 时间线工程文件（.kkclip）——
+  loadProject: (path: string): Promise<unknown> => ipcRenderer.invoke('project:load', path),
+  saveProject: (path: string, data: ProjectFile): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('project:save', path, data),
+  fileExists: (path: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', path),
+  chooseVideos: (): Promise<string[]> => ipcRenderer.invoke('video:choose'),
 
   // —— ffmpeg / 导出 ——
   ffmpegHealth: (): Promise<{ ok: boolean; version: string; path: string }> =>
     ipcRenderer.invoke('ffmpeg:health'),
-  probeFps: (path: string): Promise<number> => ipcRenderer.invoke('video:probe-fps', path),
+  probeVideo: (path: string): Promise<{ duration: number; fps: number }> =>
+    ipcRenderer.invoke('video:probe', path),
   chooseExportDir: (): Promise<string | null> => ipcRenderer.invoke('export:choose-dir'),
   openFolder: (path: string): Promise<string> => ipcRenderer.invoke('shell:open-path', path),
   exportClips: (opts: ExportOptions): Promise<ExportResult> =>
     ipcRenderer.invoke('export:run', opts),
   mergeClips: (opts: {
-    sourcePath: string
     outDir: string
     name: string
-    clips: Array<{ in: number; out: number; title: string }>
+    clips: ExportClipInput[]
     burnDanmaku?: boolean
     watermark?: string
   }): Promise<{ ok: boolean; outPath?: string; error?: string }> =>

@@ -6,6 +6,7 @@ import ffmpegStatic from 'ffmpeg-static'
 import type { Settings } from './settings'
 
 export interface ExportClip {
+  sourcePath: string // 每个片段按自己所属视频的源文件切（多视频）
   in: number
   out: number
   title: string
@@ -13,7 +14,6 @@ export interface ExportClip {
 }
 
 export interface ExportOptions {
-  sourcePath: string
   outDir: string
   clips: ExportClip[]
   skipExisting: boolean
@@ -55,18 +55,22 @@ export function resolveFfmpegPath(settings: Settings): string {
   return 'ffmpeg' // 兜底走 PATH
 }
 
-/** 探测视频帧率（fps）。ffmpeg-static 不带 ffprobe，这里跑 `ffmpeg -i` 解析 stderr。 */
-export function probeFps(sourcePath: string, settings: Settings): number {
+/** 探测视频时长(秒)+帧率(fps)。ffmpeg-static 不带 ffprobe，跑 `ffmpeg -i` 解析 stderr。 */
+export function probeVideo(sourcePath: string, settings: Settings): { duration: number; fps: number } {
   const ffmpeg = resolveFfmpegPath(settings)
   try {
     const r = spawnSync(ffmpeg, ['-i', sourcePath], { encoding: 'utf-8' })
     const text = (r.stderr || '') + (r.stdout || '')
-    // 取视频流那一行的 "59.94 fps"（避免误取 tbr/tbn）
-    const m = /([0-9]+(?:\.[0-9]+)?)\s*fps/.exec(text)
-    const fps = m ? parseFloat(m[1]) : 0
-    return fps > 0 ? fps : 30
+    const fm = /([0-9]+(?:\.[0-9]+)?)\s*fps/.exec(text)
+    const fps = fm && parseFloat(fm[1]) > 0 ? parseFloat(fm[1]) : 30
+    // Duration: 00:14:52.96,
+    const dm = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(text)
+    const duration = dm
+      ? parseInt(dm[1], 10) * 3600 + parseInt(dm[2], 10) * 60 + parseFloat(dm[3])
+      : 0
+    return { duration, fps }
   } catch {
-    return 30
+    return { duration: 0, fps: 30 }
   }
 }
 
@@ -161,8 +165,8 @@ export async function exportClips(
 
     onProgress({ index: i + 1, total, name: name + '.mp4', status: 'running' })
     try {
-      if (wmAss) await runOneWithAss(ffmpeg, opts.sourcePath, outPath, clip.in, clip.out - clip.in, wmAss)
-      else await runOne(ffmpeg, opts.sourcePath, outPath, clip.in, clip.out - clip.in)
+      if (wmAss) await runOneWithAss(ffmpeg, clip.sourcePath, outPath, clip.in, clip.out - clip.in, wmAss)
+      else await runOne(ffmpeg, clip.sourcePath, outPath, clip.in, clip.out - clip.in)
       exported++
       exports[key] = name + '.mp4'
       onProgress({ index: i + 1, total, name: name + '.mp4', status: 'done' })
@@ -200,10 +204,9 @@ function runConcat(ffmpeg: string, listPath: string, outPath: string): Promise<v
 }
 
 export interface MergeOptions {
-  sourcePath: string
   outDir: string
   name: string
-  clips: ExportClip[]
+  clips: ExportClip[] // 每个片段带自己的 sourcePath（可跨视频）
   burnDanmaku?: boolean // #77：把标题烧录成弹幕
   watermark?: string // #81：水印（应用名）
 }
@@ -313,7 +316,7 @@ export async function mergeClips(
       const clip = opts.clips[i]
       onProgress({ index: i + 1, total: total + 1, name: `截取 ${i + 1}/${total}`, status: 'running' })
       const part = join(tmp, `part_${String(i).padStart(3, '0')}.mp4`)
-      await runOne(ffmpeg, opts.sourcePath, part, clip.in, clip.out - clip.in)
+      await runOne(ffmpeg, clip.sourcePath, part, clip.in, clip.out - clip.in)
       parts.push(part)
     }
     // concat 列表（路径里的单引号需转义）
