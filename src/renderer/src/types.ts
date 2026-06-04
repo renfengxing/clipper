@@ -60,4 +60,6 @@ export interface VideoState {
   url: string
   /** 时长（秒），加载元数据后填入 */
   duration: number
+  /** 帧率（fps），打开后由主进程探测；未知时按 30 兜底 */
+  fps: number
 }

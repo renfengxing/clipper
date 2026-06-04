@@ -122,7 +122,9 @@ const api = {
   // —— ffmpeg / 导出 ——
   ffmpegHealth: (): Promise<{ ok: boolean; version: string; path: string }> =>
     ipcRenderer.invoke('ffmpeg:health'),
+  probeFps: (path: string): Promise<number> => ipcRenderer.invoke('video:probe-fps', path),
   chooseExportDir: (): Promise<string | null> => ipcRenderer.invoke('export:choose-dir'),
+  openFolder: (path: string): Promise<string> => ipcRenderer.invoke('shell:open-path', path),
   exportClips: (opts: ExportOptions): Promise<ExportResult> =>
     ipcRenderer.invoke('export:run', opts),
   mergeClips: (opts: {

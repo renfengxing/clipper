@@ -61,34 +61,27 @@ function HotkeyHint(): JSX.Element {
   )
 }
 
-/** 弹幕层（#75）：开关打开时，把当前时间命中的片段标题当弹幕从右往左飘 */
-function Danmaku(): JSX.Element | null {
-  const on = useStore((s) => s.danmakuOn)
+/** 字幕层（#75/#84）：开关打开时，把当前时间命中的片段标题在画面中央以半透明字幕显示，不抢眼 */
+function Subtitle(): JSX.Element | null {
+  const on = useStore((s) => s.subtitleOn)
   const clips = useStore((s) => s.clips)
   const currentTime = useStore((s) => s.currentTime)
   if (!on) return null
   const active = clips
     .filter((c) => currentTime >= c.in && currentTime <= c.out && c.title)
     .sort((a, b) => a.in - b.in)
+  if (active.length === 0) return null
   return (
-    <div className="absolute inset-x-0 top-0 h-[22%] overflow-hidden pointer-events-none">
-      {active.map((c, i) => {
-        const p = (currentTime - c.in) / Math.max(0.1, c.out - c.in) // 0→1
-        const left = 100 - p * 116 // 从右(100%)飘到左(-16%)
-        return (
-          <div
-            key={c.id}
-            className="absolute whitespace-nowrap text-white text-base font-medium"
-            style={{
-              left: `${left}%`,
-              top: `${4 + (i % 3) * 30}%`, // 只在顶部约 22% 区域内分 3 行（#79）
-              textShadow: '0 1px 3px rgba(0,0,0,0.9)'
-            }}
-          >
-            {c.title}
-          </div>
-        )
-      })}
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
+      {active.map((c) => (
+        <div
+          key={c.id}
+          className="text-white/45 text-xl font-medium text-center px-4"
+          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}
+        >
+          {c.title}
+        </div>
+      ))}
     </div>
   )
 }
@@ -102,6 +95,7 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
   const pause = useStore((s) => s.pause)
   const deselectClip = useStore((s) => s.deselectClip)
   const openVideoPath = useStore((s) => s.openVideoPath)
+  const closeVideo = useStore((s) => s.closeVideo)
 
   const refCb = useCallback((el: HTMLVideoElement | null) => setVideoEl(el), [setVideoEl])
 
@@ -143,8 +137,19 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
   return (
     <div className="relative flex-1 min-h-0 flex items-center justify-center bg-black group">
       <MarkingOverlay />
-      <Danmaku />
+      <Subtitle />
       <HotkeyHint />
+
+      <button
+        className="absolute top-3 right-3 w-8 h-8 rounded-full bg-slate-900/70 hover:bg-red-600/80 text-slate-200 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+        title="关闭当前视频"
+        onClick={(e) => {
+          e.stopPropagation()
+          closeVideo()
+        }}
+      >
+        ✕
+      </button>
 
       <video
         ref={refCb}

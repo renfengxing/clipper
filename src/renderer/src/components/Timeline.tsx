@@ -40,8 +40,8 @@ export function Timeline(): JSX.Element {
   const setMarkIn = useStore((s) => s.setMarkIn)
   const setMarkOut = useStore((s) => s.setMarkOut)
   const kb = useStore((s) => s.keybindings)
-  const danmakuOn = useStore((s) => s.danmakuOn)
-  const toggleDanmaku = useStore((s) => s.toggleDanmaku)
+  const subtitleOn = useStore((s) => s.subtitleOn)
+  const toggleSubtitle = useStore((s) => s.toggleSubtitle)
 
   const rateLabel = playing
     ? direction === 'reverse'
@@ -202,7 +202,7 @@ export function Timeline(): JSX.Element {
         </button>
         <button
           className="w-7 h-8 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 flex items-center justify-center text-sm disabled:opacity-40"
-          title={`控速：正常 / 慢放 1→0.5→0.25→0.1x (${keyLabel(kb.reset)})`}
+          title={`控速：正常 / 慢放 1→0.25→0.1x (${keyLabel(kb.reset)})`}
           disabled={!video}
           onClick={() => resetSpeed()}
         >
@@ -251,10 +251,10 @@ export function Timeline(): JSX.Element {
         {/* 弹幕开关（#78，放在缩放 −/+ 左边） */}
         <label
           className="flex items-center gap-1 text-xs text-slate-400 cursor-pointer mr-1 select-none"
-          title="弹幕：把片段标题按时间当弹幕在视频顶部播放"
+          title="字幕：把片段标题按时间在画面中央以半透明字幕显示"
         >
-          <input type="checkbox" checked={danmakuOn} onChange={() => toggleDanmaku()} disabled={!video} />
-          弹幕
+          <input type="checkbox" checked={subtitleOn} onChange={() => toggleSubtitle()} disabled={!video} />
+          字幕
         </label>
 
         <button

@@ -153,6 +153,14 @@ export function MergeModal(): JSX.Element | null {
         )}
 
         <div className="flex justify-end gap-2">
+          {done?.ok && (
+            <button
+              className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm text-slate-200 mr-auto"
+              onClick={() => window.api.openFolder(outDir)}
+            >
+              📂 打开文件夹
+            </button>
+          )}
           <button
             className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-sm text-slate-200"
             onClick={close}

@@ -6,7 +6,7 @@ import { keyLabel } from '../utils/keys'
 const KB_ROWS: Array<{ key: keyof Keybindings; label: string }> = [
   { key: 'speedUp', label: '快进（2/4/8x）' },
   { key: 'speedDown', label: '快退/倒放（2/4x）' },
-  { key: 'reset', label: '控速/慢放（1/0.5/0.25/0.1x）' },
+  { key: 'reset', label: '控速/慢放（1/0.25/0.1x）' },
   { key: 'mark', label: '标起点 / 终点' },
   { key: 'playPause', label: '暂停 / 继续' }
 ]

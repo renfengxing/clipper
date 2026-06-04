@@ -55,6 +55,21 @@ export function resolveFfmpegPath(settings: Settings): string {
   return 'ffmpeg' // 兜底走 PATH
 }
 
+/** 探测视频帧率（fps）。ffmpeg-static 不带 ffprobe，这里跑 `ffmpeg -i` 解析 stderr。 */
+export function probeFps(sourcePath: string, settings: Settings): number {
+  const ffmpeg = resolveFfmpegPath(settings)
+  try {
+    const r = spawnSync(ffmpeg, ['-i', sourcePath], { encoding: 'utf-8' })
+    const text = (r.stderr || '') + (r.stdout || '')
+    // 取视频流那一行的 "59.94 fps"（避免误取 tbr/tbn）
+    const m = /([0-9]+(?:\.[0-9]+)?)\s*fps/.exec(text)
+    const fps = m ? parseFloat(m[1]) : 0
+    return fps > 0 ? fps : 30
+  } catch {
+    return 30
+  }
+}
+
 export function ffmpegHealth(settings: Settings): { ok: boolean; version: string; path: string } {
   const path = resolveFfmpegPath(settings)
   try {

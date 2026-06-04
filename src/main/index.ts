@@ -4,7 +4,7 @@ import { createReadStream, statSync, existsSync, writeFileSync } from 'fs'
 import { Readable } from 'stream'
 import { readSettings, writeSettings, addRecentFile, type Settings } from './settings'
 import { loadProject, saveProject, type ProjectFile } from './project'
-import { ffmpegHealth, exportClips, mergeClips, type ExportOptions, type MergeOptions } from './ffmpeg'
+import { ffmpegHealth, probeFps, exportClips, mergeClips, type ExportOptions, type MergeOptions } from './ffmpeg'
 import { cleanupTitle, autoTagClips, analyzeReport } from './ai'
 
 const isMac = process.platform === 'darwin'
@@ -248,6 +248,8 @@ app.whenReady().then(() => {
 
   // —— ffmpeg ——
   ipcMain.handle('ffmpeg:health', () => ffmpegHealth(readSettings()))
+  ipcMain.handle('video:probe-fps', (_e, path: string) => probeFps(path, readSettings()))
+  ipcMain.handle('shell:open-path', (_e, p: string) => shell.openPath(p))
   ipcMain.handle('export:choose-dir', async () => {
     if (!mainWindow) return null
     const r = await dialog.showOpenDialog(mainWindow, {
