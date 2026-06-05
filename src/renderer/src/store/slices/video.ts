@@ -118,35 +118,15 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
   },
 
   openVideoPath: async (path) => {
-    if (path.endsWith('.kkclip')) {
-      const raw = await window.api.loadProject(path)
-      set(resetState())
-      get().hydrateProject(raw, stripExt(basename(path)))
-      set({ timelinePath: path })
-      void window.api.addRecentFile(path)
-      return
-    }
-    // 裸视频：若同文件夹已有同名 .kkclip 则打开它（恢复时间线）
-    const dir = dirOf(path)
-    const folderName = basename(dir) || stripExt(basename(path))
-    const kkclip = dir + '/' + folderName + '.kkclip'
-    if (await window.api.fileExists(kkclip)) {
-      await get().openVideoPath(kkclip)
-      return
-    }
-    // 新建单视频时间线
-    set(resetState())
-    await get().addVideosFromPaths([path])
-    // 旧 .kkfb.json 迁移
-    const legacyPath = path + '.kkfb.json'
-    if (await window.api.fileExists(legacyPath)) {
+    // 从旧 .kkfb.json 把片段迁移到当前单视频时间线
+    const importLegacy = async (legacyPath: string): Promise<void> => {
       const legacy = (await window.api.loadProject(legacyPath)) as {
         clips?: Array<{ id?: string; in: number; out: number; title?: string; created_at?: string; tags?: string[] }>
         video_tags?: string[]
         title_template?: string
       } | null
       const vid = get().videos[0]?.id
-      if (legacy && Array.isArray(legacy.clips) && vid) {
+      if (legacy && Array.isArray(legacy.clips) && legacy.clips.length > 0 && vid) {
         const iso = new Date().toISOString()
         const clips = legacy.clips.map((c, i) => ({
           id: c.id || crypto.randomUUID(),
@@ -160,11 +140,43 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         }))
         set({
           clips,
-          videoTags: legacy.video_tags ?? get().videoTags,
+          videoTags: legacy.video_tags && legacy.video_tags.length ? legacy.video_tags : get().videoTags,
           titleTemplate: legacy.title_template ?? get().titleTemplate
         })
       }
     }
+
+    if (path.endsWith('.kkclip')) {
+      const raw = await window.api.loadProject(path)
+      set(resetState())
+      get().hydrateProject(raw, stripExt(basename(path)))
+      set({ timelinePath: path })
+      void window.api.addRecentFile(path)
+      return
+    }
+
+    const dir = dirOf(path)
+    const folderName = basename(dir) || stripExt(basename(path))
+    const kkclip = dir + '/' + folderName + '.kkclip'
+    const legacyPath = path + '.kkfb.json'
+
+    if (await window.api.fileExists(kkclip)) {
+      const raw = await window.api.loadProject(kkclip)
+      set(resetState())
+      get().hydrateProject(raw, folderName)
+      set({ timelinePath: kkclip })
+      void window.api.addRecentFile(kkclip)
+      // 补迁移：已有 .kkclip 但里面没片段，而旧 .kkfb.json 有 → 不丢老数据（#94）
+      if (get().clips.length === 0 && (await window.api.fileExists(legacyPath))) {
+        await importLegacy(legacyPath)
+      }
+      return
+    }
+
+    // 全新单视频时间线
+    set(resetState())
+    await get().addVideosFromPaths([path])
+    if (await window.api.fileExists(legacyPath)) await importLegacy(legacyPath)
   },
 
   closeVideo: () => {

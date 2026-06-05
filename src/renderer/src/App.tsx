@@ -21,6 +21,7 @@ function App(): JSX.Element {
   const openVideoPath = useStore((s) => s.openVideoPath)
   const addVideosFromPaths = useStore((s) => s.addVideosFromPaths)
   const closeVideo = useStore((s) => s.closeVideo)
+  const hasVideo = useStore((s) => s.videos.length > 0)
   const setTitleTemplate = useStore((s) => s.setTitleTemplate)
   const setKeybindings = useStore((s) => s.setKeybindings)
   const setDefaultTags = useStore((s) => s.setDefaultTags)
@@ -92,6 +93,8 @@ function App(): JSX.Element {
     <div
       className="relative flex flex-col h-full bg-slate-950 text-slate-100"
       onDragOver={(e) => {
+        // 只对从系统拖入的"文件"显示提示；时间线内部段拖拽(无 Files)不触发（#92/#93）
+        if (!Array.from(e.dataTransfer.types).includes('Files')) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'copy'
         if (!dragging) setDragging(true)
@@ -139,11 +142,9 @@ function App(): JSX.Element {
       <ReportModal />
 
       {dragging && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 border-4 border-dashed border-cyan-400 pointer-events-none">
-          <div className="text-center">
-            <div className="text-5xl mb-2">📥</div>
-            <div className="text-lg text-cyan-300">松手以打开视频</div>
-            <div className="text-xs text-slate-400 mt-1">支持 mp4 / mov / m4v</div>
+        <div className="absolute inset-0 z-50 flex items-start justify-center border-4 border-dashed border-cyan-400 pointer-events-none">
+          <div className="mt-4 px-4 py-2 rounded-full bg-slate-900/90 border border-cyan-500 text-sm text-cyan-200 shadow-lg">
+            📥 {hasVideo ? '松手添加到时间线' : '松手打开视频'}（可多选 mp4 / mov）
           </div>
         </div>
       )}

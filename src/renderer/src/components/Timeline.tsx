@@ -25,6 +25,7 @@ export function Timeline(): JSX.Element {
   const updateClipTimes = useStore((s) => s.updateClipTimes)
   const selectClip = useStore((s) => s.selectClip)
   const reorderVideos = useStore((s) => s.reorderVideos)
+  const removeVideo = useStore((s) => s.removeVideo)
   const activeVideoId = useStore((s) => s.activeVideoId)
 
   const playing = useStore((s) => s.playing)
@@ -283,13 +284,25 @@ export function Timeline(): JSX.Element {
                     onClick={() => seek(videoOffset(videos, v.id))}
                     title={`${v.fileName}（拖动可调整顺序）`}
                     className={[
-                      'absolute top-0 bottom-0 px-1 text-[10px] leading-5 truncate cursor-grab rounded-sm border',
+                      'group absolute top-0 bottom-0 pl-1 pr-4 text-[10px] leading-5 truncate cursor-grab rounded-sm border',
                       isActive ? 'bg-slate-700 text-slate-100 border-slate-500' : 'bg-slate-800 text-slate-400 border-slate-700',
                       isDrop ? 'ring-1 ring-cyan-400' : ''
                     ].join(' ')}
                     style={{ left: `${left}%`, width: `${Math.max(2, w)}%` }}
                   >
                     {i + 1}. {v.fileName}
+                    <button
+                      className="absolute right-0.5 top-0 bottom-0 px-0.5 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
+                      title="从时间线移除该视频（含其片段）"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (confirm(`从时间线移除「${v.fileName}」？该视频下的片段也会一并删除。`)) {
+                          removeVideo(v.id)
+                        }
+                      }}
+                    >
+                      ✕
+                    </button>
                   </div>
                 )
               })}
