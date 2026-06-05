@@ -19,35 +19,6 @@ export interface Settings {
   default_tags: string[]
 }
 
-export interface ProjectFile {
-  version: string
-  app_name?: string
-  name: string
-  created_at: string
-  updated_at: string
-  title_template?: string
-  videos: Array<{
-    id: string
-    path: string
-    fileName: string
-    duration: number
-    fps: number
-    order: number
-  }>
-  clips: Array<{
-    id: string
-    videoId: string
-    in: number
-    out: number
-    title: string
-    order: number
-    created_at: string
-    tags?: string[]
-  }>
-  video_tags?: string[]
-  last_export_dir?: string | null
-  exports?: Record<string, string>
-}
 
 export interface ExportProgress {
   index: number
@@ -128,9 +99,9 @@ const api = {
   openVideoPath: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('video:open-path', filePath),
 
-  // —— 时间线工程文件（.kkclip）——
+  // —— 工程文件 / sidecar（任意 JSON）——
   loadProject: (path: string): Promise<unknown> => ipcRenderer.invoke('project:load', path),
-  saveProject: (path: string, data: ProjectFile): Promise<{ ok: boolean }> =>
+  saveProject: (path: string, data: unknown): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('project:save', path, data),
   fileExists: (path: string): Promise<boolean> => ipcRenderer.invoke('fs:exists', path),
   chooseVideos: (): Promise<string[]> => ipcRenderer.invoke('video:choose'),

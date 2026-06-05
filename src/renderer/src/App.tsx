@@ -22,6 +22,7 @@ function App(): JSX.Element {
   const addVideosFromPaths = useStore((s) => s.addVideosFromPaths)
   const closeVideo = useStore((s) => s.closeVideo)
   const hasVideo = useStore((s) => s.videos.length > 0)
+  const draggingSegment = useStore((s) => s.draggingSegment)
   const setTitleTemplate = useStore((s) => s.setTitleTemplate)
   const setKeybindings = useStore((s) => s.setKeybindings)
   const setDefaultTags = useStore((s) => s.setDefaultTags)
@@ -93,7 +94,9 @@ function App(): JSX.Element {
     <div
       className="relative flex flex-col h-full bg-slate-950 text-slate-100"
       onDragOver={(e) => {
-        // 只对从系统拖入的"文件"显示提示；时间线内部段拖拽(无 Files)不触发（#92/#93）
+        // 时间线段内部拖拽时绝不显示文件蒙层（#92/#98）
+        if (draggingSegment) return
+        // 只对从系统拖入的"文件"显示提示（#93）
         if (!Array.from(e.dataTransfer.types).includes('Files')) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'copy'

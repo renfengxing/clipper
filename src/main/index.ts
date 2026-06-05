@@ -3,7 +3,7 @@ import { join, extname, basename } from 'path'
 import { createReadStream, statSync, existsSync, writeFileSync } from 'fs'
 import { Readable } from 'stream'
 import { readSettings, writeSettings, addRecentFile, type Settings } from './settings'
-import { loadProject, saveProject, fileExists, type ProjectFile } from './project'
+import { loadProject, saveJson, fileExists } from './project'
 import { ffmpegHealth, probeVideo, exportClips, mergeClips, type ExportOptions, type MergeOptions } from './ffmpeg'
 import { cleanupTitle, autoTagClips, analyzeReport } from './ai'
 
@@ -239,10 +239,10 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('video:open-path', (_e, filePath: string) => openVideoFile(filePath))
 
-  // —— 时间线工程文件（.kkclip）——
+  // —— 工程文件 / sidecar（任意 JSON）——
   ipcMain.handle('project:load', (_e, path: string) => loadProject(path))
-  ipcMain.handle('project:save', (_e, path: string, data: ProjectFile) => {
-    saveProject(path, data)
+  ipcMain.handle('project:save', (_e, path: string, data: unknown) => {
+    saveJson(path, data)
     return { ok: true }
   })
   ipcMain.handle('fs:exists', (_e, path: string) => fileExists(path))

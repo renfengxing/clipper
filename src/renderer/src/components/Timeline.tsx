@@ -26,6 +26,7 @@ export function Timeline(): JSX.Element {
   const selectClip = useStore((s) => s.selectClip)
   const reorderVideos = useStore((s) => s.reorderVideos)
   const removeVideo = useStore((s) => s.removeVideo)
+  const setDraggingSegment = useStore((s) => s.setDraggingSegment)
   const activeVideoId = useStore((s) => s.activeVideoId)
 
   const playing = useStore((s) => s.playing)
@@ -266,20 +267,28 @@ export function Timeline(): JSX.Element {
                   <div
                     key={v.id}
                     draggable
-                    onDragStart={() => setDragIdx(i)}
+                    onDragStart={(e) => {
+                      e.stopPropagation()
+                      setDragIdx(i)
+                      setDraggingSegment(true)
+                    }}
                     onDragOver={(e) => {
                       e.preventDefault()
+                      e.stopPropagation()
                       if (overIdx !== i) setOverIdx(i)
                     }}
                     onDrop={(e) => {
                       e.preventDefault()
+                      e.stopPropagation()
                       if (dragIdx !== null) reorderVideos(dragIdx, i)
                       setDragIdx(null)
                       setOverIdx(null)
+                      setDraggingSegment(false)
                     }}
                     onDragEnd={() => {
                       setDragIdx(null)
                       setOverIdx(null)
+                      setDraggingSegment(false)
                     }}
                     onClick={() => seek(videoOffset(videos, v.id))}
                     title={`${v.fileName}（拖动可调整顺序）`}
@@ -293,12 +302,10 @@ export function Timeline(): JSX.Element {
                     {i + 1}. {v.fileName}
                     <button
                       className="absolute right-0.5 top-0 bottom-0 px-0.5 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100"
-                      title="从时间线移除该视频（含其片段）"
+                      title="从时间线移除该视频（其片段仍随视频保留，重新添加即恢复）"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (confirm(`从时间线移除「${v.fileName}」？该视频下的片段也会一并删除。`)) {
-                          removeVideo(v.id)
-                        }
+                        removeVideo(v.id)
                       }}
                     >
                       ✕

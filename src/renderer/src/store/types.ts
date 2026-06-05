@@ -105,6 +105,7 @@ export interface UiSlice {
   keybindings: Keybindings
   isFullscreen: boolean
   subtitleOn: boolean
+  draggingSegment: boolean
   settingsOpen: boolean
   exportOpen: boolean
   mergeOpen: boolean
@@ -112,6 +113,7 @@ export interface UiSlice {
   setKeybindings: (kb: Keybindings) => void
   setIsFullscreen: (v: boolean) => void
   toggleSubtitle: () => void
+  setDraggingSegment: (v: boolean) => void
   openSettings: () => void
   closeSettings: () => void
   openExport: () => void

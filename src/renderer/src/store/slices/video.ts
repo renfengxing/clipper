@@ -1,10 +1,14 @@
 import type { StateCreator } from 'zustand'
-import type { SourceVideo } from '../../types'
+import type { SourceVideo, Clip } from '../../types'
 import type { AppState, VideoSlice } from '../types'
 import { toMediaUrl, basename, dirOf, stripExt } from '../../utils/media'
 import { ordered, videoOffset } from '../../utils/timeline'
 
-/** 打开/关闭时间线时重置的跨切片状态 */
+/** 片段随视频存：<视频>.kkfb.json（#96） */
+function sidecarPath(videoPath: string): string {
+  return videoPath + '.kkfb.json'
+}
+
 function resetState(): Partial<AppState> {
   return {
     videos: [],
@@ -37,150 +41,146 @@ function resetState(): Partial<AppState> {
 
 async function probeToSource(path: string, order: number): Promise<SourceVideo> {
   const { duration, fps } = await window.api.probeVideo(path)
-  return {
-    id: crypto.randomUUID(),
-    path,
-    fileName: basename(path),
-    url: toMediaUrl(path),
-    duration,
-    fps,
-    order
-  }
+  return { id: crypto.randomUUID(), path, fileName: basename(path), url: toMediaUrl(path), duration, fps, order }
 }
 
-export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set, get) => ({
-  videos: [],
-  activeVideoId: null,
-  timelineName: '',
-  timelinePath: null,
+/** 读取某视频的 sidecar，得到（内存版）片段 + 该视频携带的标签词表 */
+async function loadSidecar(video: SourceVideo): Promise<{ clips: Clip[]; tags: string[] }> {
+  const raw = (await window.api.loadProject(sidecarPath(video.path))) as {
+    clips?: Array<{ id?: string; in: number; out: number; title?: string; order?: number; created_at?: string; tags?: string[] }>
+    video_tags?: string[]
+  } | null
+  if (!raw || !Array.isArray(raw.clips)) return { clips: [], tags: raw?.video_tags || [] }
+  const iso = new Date().toISOString()
+  const clips = raw.clips
+    .slice()
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((c) => ({
+      id: c.id || crypto.randomUUID(),
+      videoId: video.id,
+      in: c.in,
+      out: c.out,
+      title: c.title || '',
+      order: 0,
+      created_at: c.created_at || iso,
+      tags: c.tags || []
+    }))
+  return { clips, tags: raw.video_tags || [] }
+}
 
-  addVideosFromPaths: async (paths) => {
-    if (paths.length === 0) return
-    const cur = get().videos
-    const added = await Promise.all(paths.map((p, i) => probeToSource(p, cur.length + i)))
-    const videos = [...cur, ...added]
-    const patch: Partial<AppState> = { videos }
-    if (get().activeVideoId == null && added[0]) {
-      patch.activeVideoId = added[0].id
-      patch.pendingSeekLocal = 0
-      patch.currentTime = 0
-    }
-    if (cur.length === 0 && added[0]) {
-      const dir = dirOf(added[0].path)
-      const folderName = basename(dir) || stripExt(added[0].fileName)
-      patch.timelineName = folderName
-      patch.timelinePath = dir + '/' + folderName + '.kkclip'
-      patch.projectLoaded = true
-      if (get().videoTags.length === 0) patch.videoTags = [...get().defaultTags]
-      void window.api.addRecentFile(patch.timelinePath)
-    }
-    set(patch)
-  },
-
-  chooseAndAddVideos: async () => {
-    const paths = await window.api.chooseVideos()
-    await get().addVideosFromPaths(paths)
-  },
-
-  removeVideo: (id) =>
-    set((s) => {
-      const videos = ordered(s.videos.filter((v) => v.id !== id)).map((v, i) => ({ ...v, order: i }))
-      const clips = s.clips.filter((c) => c.videoId !== id)
-      const activeVideoId = s.activeVideoId === id ? (videos[0]?.id ?? null) : s.activeVideoId
-      return {
-        videos,
-        clips,
-        activeVideoId,
-        currentTime: 0,
-        pendingSeekLocal: activeVideoId ? 0 : null,
-        playing: false,
-        selectedClipId: s.selectedClipId && clips.some((c) => c.id === s.selectedClipId) ? s.selectedClipId : null
-      }
-    }),
-
-  reorderVideos: (from, to) =>
-    set((s) => {
-      const list = ordered(s.videos)
-      if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return {}
-      const [moved] = list.splice(from, 1)
-      list.splice(to, 0, moved)
-      return { videos: list.map((v, i) => ({ ...v, order: i })) }
-    }),
-
-  setActiveVideo: (id, local) => {
-    const v = get().videos.find((x) => x.id === id)
-    if (!v) return
-    set({
-      activeVideoId: id,
-      pendingSeekLocal: local,
-      currentTime: videoOffset(get().videos, id) + local
+export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set, get) => {
+  // 给当前所有视频载入各自 sidecar 的片段，合并进内存
+  const loadAllSidecars = async (): Promise<void> => {
+    const vids = ordered(get().videos)
+    const results = await Promise.all(vids.map(loadSidecar))
+    const clips: Clip[] = []
+    const tagSet = new Set(get().videoTags)
+    results.forEach((r) => {
+      r.clips.forEach((c) => clips.push({ ...c, order: clips.length }))
+      r.tags.forEach((t) => tagSet.add(t))
     })
-  },
-
-  openVideoPath: async (path) => {
-    // 从旧 .kkfb.json 把片段迁移到当前单视频时间线
-    const importLegacy = async (legacyPath: string): Promise<void> => {
-      const legacy = (await window.api.loadProject(legacyPath)) as {
-        clips?: Array<{ id?: string; in: number; out: number; title?: string; created_at?: string; tags?: string[] }>
-        video_tags?: string[]
-        title_template?: string
-      } | null
-      const vid = get().videos[0]?.id
-      if (legacy && Array.isArray(legacy.clips) && legacy.clips.length > 0 && vid) {
-        const iso = new Date().toISOString()
-        const clips = legacy.clips.map((c, i) => ({
-          id: c.id || crypto.randomUUID(),
-          videoId: vid,
-          in: c.in,
-          out: c.out,
-          title: c.title || '',
-          order: i,
-          created_at: c.created_at || iso,
-          tags: c.tags || []
-        }))
-        set({
-          clips,
-          videoTags: legacy.video_tags && legacy.video_tags.length ? legacy.video_tags : get().videoTags,
-          titleTemplate: legacy.title_template ?? get().titleTemplate
-        })
-      }
-    }
-
-    if (path.endsWith('.kkclip')) {
-      const raw = await window.api.loadProject(path)
-      set(resetState())
-      get().hydrateProject(raw, stripExt(basename(path)))
-      set({ timelinePath: path })
-      void window.api.addRecentFile(path)
-      return
-    }
-
-    const dir = dirOf(path)
-    const folderName = basename(dir) || stripExt(basename(path))
-    const kkclip = dir + '/' + folderName + '.kkclip'
-    const legacyPath = path + '.kkfb.json'
-
-    if (await window.api.fileExists(kkclip)) {
-      const raw = await window.api.loadProject(kkclip)
-      set(resetState())
-      get().hydrateProject(raw, folderName)
-      set({ timelinePath: kkclip })
-      void window.api.addRecentFile(kkclip)
-      // 补迁移：已有 .kkclip 但里面没片段，而旧 .kkfb.json 有 → 不丢老数据（#94）
-      if (get().clips.length === 0 && (await window.api.fileExists(legacyPath))) {
-        await importLegacy(legacyPath)
-      }
-      return
-    }
-
-    // 全新单视频时间线
-    set(resetState())
-    await get().addVideosFromPaths([path])
-    if (await window.api.fileExists(legacyPath)) await importLegacy(legacyPath)
-  },
-
-  closeVideo: () => {
-    get().pause()
-    set(resetState())
+    set({ clips, videoTags: Array.from(tagSet) })
   }
-})
+
+  return {
+    videos: [],
+    activeVideoId: null,
+    timelineName: '',
+    timelinePath: null,
+
+    addVideosFromPaths: async (paths) => {
+      if (paths.length === 0) return
+      const cur = get().videos
+      const added = await Promise.all(paths.map((p, i) => probeToSource(p, cur.length + i)))
+      const sidecars = await Promise.all(added.map(loadSidecar))
+      const videos = [...cur, ...added]
+      const newClips: Clip[] = []
+      const tagSet = new Set(get().videoTags)
+      sidecars.forEach((r) => {
+        r.clips.forEach((c) => newClips.push(c))
+        r.tags.forEach((t) => tagSet.add(t))
+      })
+      const clips = [...get().clips, ...newClips].map((c, i) => ({ ...c, order: i }))
+      const patch: Partial<AppState> = { videos, clips, videoTags: Array.from(tagSet) }
+      if (get().activeVideoId == null && added[0]) {
+        patch.activeVideoId = added[0].id
+        patch.pendingSeekLocal = 0
+        patch.currentTime = 0
+      }
+      if (cur.length === 0 && added[0]) {
+        const dir = dirOf(added[0].path)
+        const folderName = basename(dir) || stripExt(added[0].fileName)
+        patch.timelineName = folderName
+        patch.timelinePath = dir + '/' + folderName + '.kkclip'
+        patch.projectLoaded = true
+        if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
+        void window.api.addRecentFile(patch.timelinePath)
+      }
+      set(patch)
+    },
+
+    chooseAndAddVideos: async () => {
+      const paths = await window.api.chooseVideos()
+      await get().addVideosFromPaths(paths)
+    },
+
+    // 从时间线移除视频：只动"摆放"，片段仍随该视频保存在 sidecar，重新添加即恢复（#96）
+    removeVideo: (id) =>
+      set((s) => {
+        const videos = ordered(s.videos.filter((v) => v.id !== id)).map((v, i) => ({ ...v, order: i }))
+        const clips = s.clips.filter((c) => c.videoId !== id).map((c, i) => ({ ...c, order: i }))
+        const activeVideoId = s.activeVideoId === id ? (videos[0]?.id ?? null) : s.activeVideoId
+        return {
+          videos,
+          clips,
+          activeVideoId,
+          currentTime: 0,
+          pendingSeekLocal: activeVideoId ? 0 : null,
+          playing: false,
+          selectedClipId: s.selectedClipId && clips.some((c) => c.id === s.selectedClipId) ? s.selectedClipId : null
+        }
+      }),
+
+    reorderVideos: (from, to) =>
+      set((s) => {
+        const list = ordered(s.videos)
+        if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return {}
+        const [moved] = list.splice(from, 1)
+        list.splice(to, 0, moved)
+        return { videos: list.map((v, i) => ({ ...v, order: i })) }
+      }),
+
+    setActiveVideo: (id, local) => {
+      const v = get().videos.find((x) => x.id === id)
+      if (!v) return
+      set({ activeVideoId: id, pendingSeekLocal: local, currentTime: videoOffset(get().videos, id) + local })
+    },
+
+    openVideoPath: async (path) => {
+      if (path.endsWith('.kkclip')) {
+        const raw = await window.api.loadProject(path)
+        set(resetState())
+        get().hydrateProject(raw, stripExt(basename(path)))
+        set({ timelinePath: path })
+        void window.api.addRecentFile(path)
+        await loadAllSidecars()
+        return
+      }
+      const dir = dirOf(path)
+      const folderName = basename(dir) || stripExt(basename(path))
+      const kkclip = dir + '/' + folderName + '.kkclip'
+      if (await window.api.fileExists(kkclip)) {
+        await get().openVideoPath(kkclip)
+        return
+      }
+      // 新建单视频时间线（addVideosFromPaths 会自动载入该视频 sidecar 的片段）
+      set(resetState())
+      await get().addVideosFromPaths([path])
+    },
+
+    closeVideo: () => {
+      get().pause()
+      set(resetState())
+    }
+  }
+}

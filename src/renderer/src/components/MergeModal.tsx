@@ -65,28 +65,25 @@ export function MergeModal(): JSX.Element | null {
     })
     if (res.ok && res.outPath) {
       setLastExportDir(outDir)
-      // #76：为合并视频建一个新时间线（单视频，片段按顺序重定时），存成 .kkclip
+      // #76/#96：合并视频的片段写到它的 sidecar；再建个只含该视频的时间线 .kkclip
       const outPath = res.outPath
       const iso = new Date().toISOString()
       const probe = await window.api.probeVideo(outPath)
-      const vid = crypto.randomUUID()
       let acc = 0
       const mclips = selected.map((c, i) => {
         const len = c.out - c.in
-        const clip = {
-          id: crypto.randomUUID(),
-          videoId: vid,
-          in: acc,
-          out: acc + len,
-          title: c.title,
-          order: i,
-          created_at: iso,
-          tags: c.tags || []
-        }
+        const clip = { id: crypto.randomUUID(), in: acc, out: acc + len, title: c.title, order: i, created_at: iso, tags: c.tags || [] }
         acc += len
         return clip
       })
       const fileName = basename(outPath)
+      await window.api.saveProject(outPath + '.kkfb.json', {
+        version: '1.1',
+        app_name: APP_NAME,
+        clips: mclips,
+        video_tags: videoTags,
+        updated_at: iso
+      })
       const kkclip = outPath.replace(/\.[^./\\]+$/, '') + '.kkclip'
       await window.api.saveProject(kkclip, {
         version: '2.0',
@@ -94,10 +91,7 @@ export function MergeModal(): JSX.Element | null {
         name: name.trim() || '合并片段',
         created_at: iso,
         updated_at: iso,
-        videos: [
-          { id: vid, path: outPath, fileName, duration: probe.duration || acc, fps: probe.fps || 30, order: 0 }
-        ],
-        clips: mclips,
+        videos: [{ path: outPath, fileName, duration: probe.duration || acc, fps: probe.fps || 30, order: 0 }],
         video_tags: videoTags
       })
       void window.api.addRecentFile(kkclip)
