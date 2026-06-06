@@ -18,7 +18,7 @@ export function TitleModal(): JSX.Element | null {
   const [value, setValue] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (open) {
@@ -54,22 +54,24 @@ export function TitleModal(): JSX.Element | null {
           <span className="text-cyan-300 ml-2">（{(hi - lo).toFixed(2)}s）</span>
         </div>
 
-        <input
+        <textarea
           ref={inputRef}
           value={value}
+          rows={3}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              submit()
+              submit() // Enter 保存
             } else if (e.key === 'Escape') {
               e.preventDefault()
               close()
             }
+            // Shift+Enter 换行（默认行为）
           }}
-          placeholder="片段标题，如「防守没卡住人」（留空＝取消）"
-          className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-600 text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-400"
+          placeholder="片段解说 / 评价，如「宽宽过人后没体力，回防慢了半拍」（满了自动换行；Enter 保存，Shift+Enter 换行，留空＝取消）"
+          className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-600 text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-400 resize-y leading-relaxed break-words"
         />
 
         {/* 标签（可选可输入，#60/#61） */}

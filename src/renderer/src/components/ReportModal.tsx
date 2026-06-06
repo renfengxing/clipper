@@ -6,8 +6,10 @@ export function ReportModal(): JSX.Element | null {
   const close = useStore((s) => s.closeReport)
   const clips = useStore((s) => s.clips)
   const timelineName = useStore((s) => s.timelineName)
+  const aiAutoTag = useStore((s) => s.aiAutoTag)
 
   const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState('')
   const [report, setReport] = useState('')
   const [error, setError] = useState('')
 
@@ -16,13 +18,21 @@ export function ReportModal(): JSX.Element | null {
     setReport('')
     setError('')
     setLoading(true)
-    window.api
-      .report(clips.map((c) => ({ title: c.title, in: c.in, out: c.out, tags: c.tags })))
-      .then((r) => {
-        setLoading(false)
-        if (r.ok && r.report) setReport(r.report)
-        else setError(r.code === 'NO_KEY' ? '请先在设置里填写 DeepSeek API Key' : r.error || '分析失败')
-      })
+    ;(async () => {
+      // #105：有未打标签的片段 → 先 AI 自动打标签，让报告拿到更多有效信息
+      const untagged = useStore.getState().clips.filter((c) => !(c.tags && c.tags.length))
+      if (useStore.getState().clips.length > 0 && untagged.length > 0) {
+        setStatus(`正在为 ${untagged.length} 个未打标签的片段自动打标签…`)
+        await aiAutoTag() // 失败也继续（如无 Key），不阻断报告
+      }
+      setStatus('正在生成分析报告…')
+      const cur = useStore.getState().clips
+      const r = await window.api.report(cur.map((c) => ({ title: c.title, in: c.in, out: c.out, tags: c.tags })))
+      setLoading(false)
+      setStatus('')
+      if (r.ok && r.report) setReport(r.report)
+      else setError(r.code === 'NO_KEY' ? '请先在设置里填写 DeepSeek API Key' : r.error || '分析失败')
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -37,7 +47,7 @@ export function ReportModal(): JSX.Element | null {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {loading && <div className="text-sm text-slate-400">正在分析…</div>}
+          {loading && <div className="text-sm text-slate-400">{status || '正在分析…'}</div>}
           {error && <div className="text-sm text-red-400">{error}</div>}
           {report && (
             <pre className="whitespace-pre-wrap break-words text-sm text-slate-200 font-sans leading-relaxed">
