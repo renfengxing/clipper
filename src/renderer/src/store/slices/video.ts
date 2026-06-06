@@ -163,7 +163,8 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         get().hydrateProject(raw, stripExt(basename(path)))
         set({ timelinePath: path })
         void window.api.addRecentFile(path)
-        await loadAllSidecars()
+        // 旧格式内嵌了 clips（hydrate 已迁移）→ 不再覆盖；否则从各 sidecar 载入
+        if (get().clips.length === 0) await loadAllSidecars()
         return
       }
       const dir = dirOf(path)

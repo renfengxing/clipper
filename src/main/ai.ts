@@ -107,22 +107,31 @@ ${list}
 只返回一个 JSON 数组，长度与片段数相同，每个元素是该片段的标签字符串数组（无合适标签则空数组）。例如：[["宽宽","进球"],["康康","失误"],[]]
 不要任何解释或多余文字。`
 
-  const raw = await deepseek(prompt, settings, 512)
-  // 容错：截取第一个 [ 到最后一个 ]
-  const start = raw.indexOf('[')
-  const end = raw.lastIndexOf(']')
-  const json = start >= 0 && end > start ? raw.slice(start, end + 1) : raw
+  // token 上限按片段数动态给（避免长数组被截断导致 JSON 解析失败）
+  const maxTokens = Math.min(8000, 400 + clips.length * 28)
+  const raw = await deepseek(prompt, settings, maxTokens)
+  // 容错：去掉 ``` 代码围栏、截取最外层数组、去尾逗号
+  let cleaned = raw.trim().replace(/```(?:json)?/gi, '').trim()
+  const start = cleaned.indexOf('[')
+  const end = cleaned.lastIndexOf(']')
+  if (start >= 0 && end > start) cleaned = cleaned.slice(start, end + 1)
+  cleaned = cleaned.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}')
   let parsed: unknown
   try {
-    parsed = JSON.parse(json)
+    parsed = JSON.parse(cleaned)
   } catch {
-    throw new Error('AI 返回格式无法解析')
+    throw new Error('AI 返回格式无法解析：' + raw.slice(0, 100))
   }
   if (!Array.isArray(parsed)) throw new Error('AI 返回不是数组')
   return clips.map((_, i) => {
     const item = (parsed as unknown[])[i]
-    if (!Array.isArray(item)) return []
-    return item.map((x) => String(x).trim().slice(0, 15)).filter(Boolean)
+    // 兼容数组、或逗号/顿号分隔的字符串
+    const arr = Array.isArray(item)
+      ? item
+      : typeof item === 'string'
+        ? item.split(/[,，、]/)
+        : []
+    return arr.map((x) => String(x).trim().slice(0, 15)).filter(Boolean)
   })
 }
 
