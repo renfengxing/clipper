@@ -100,7 +100,8 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     get().pause()
     set({ selectedClipId: id })
     get().seek(globalIn)
-    set({ previewEnd: globalOut, playing: true, direction: 'forward', rate: 1 })
+    // previewStart 非空 → 到 out 自动回到 in 循环（#102）
+    set({ previewStart: globalIn, previewEnd: globalOut, playing: true, direction: 'forward', rate: 1 })
     const el = get().videoEl
     if (el) {
       el.playbackRate = 1
@@ -108,7 +109,7 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     }
   },
 
-  deselectClip: () => set({ selectedClipId: null }),
+  deselectClip: () => set({ selectedClipId: null, previewStart: null, previewEnd: null }),
 
   updateClipTitle: (id, title) =>
     set((s) => {

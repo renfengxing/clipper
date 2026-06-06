@@ -24,6 +24,8 @@ export function ClipList({ width, onCollapse }: Props): JSX.Element {
   const activeTags = useStore((s) => s.activeTags)
   const toggleActiveTag = useStore((s) => s.toggleActiveTag)
   const clearActiveTags = useStore((s) => s.clearActiveTags)
+  const tagFilterMode = useStore((s) => s.tagFilterMode)
+  const setTagFilterMode = useStore((s) => s.setTagFilterMode)
   const showCheckedOnly = useStore((s) => s.showCheckedOnly)
   const setShowCheckedOnly = useStore((s) => s.setShowCheckedOnly)
   const videoTags = useStore((s) => s.videoTags)
@@ -59,7 +61,12 @@ export function ClipList({ width, onCollapse }: Props): JSX.Element {
   ordered(videos).forEach((v, i) => (videoIndex[v.id] = i + 1))
   let visible = [...clips].sort((a, b) => clipGlobalIn(videos, a) - clipGlobalIn(videos, b))
   if (activeTags.length > 0) {
-    visible = visible.filter((c) => (c.tags || []).some((t) => activeTags.includes(t)))
+    visible = visible.filter((c) => {
+      const ct = c.tags || []
+      return tagFilterMode === 'and'
+        ? activeTags.every((t) => ct.includes(t)) // 并且：含全部选中标签
+        : activeTags.some((t) => ct.includes(t)) // 或：含任一
+    })
   }
   if (showCheckedOnly) visible = visible.filter((c) => checkedIds.includes(c.id))
   const visibleIds = visible.map((c) => c.id)
@@ -153,6 +160,15 @@ export function ClipList({ width, onCollapse }: Props): JSX.Element {
               #{t}
             </button>
           ))}
+          {activeTags.length > 1 && (
+            <button
+              className="px-2 py-0.5 rounded text-xs bg-slate-700 text-amber-300 ml-auto"
+              title="多标签过滤方式：并且=同时含所有选中标签；或=含任一"
+              onClick={() => setTagFilterMode(tagFilterMode === 'and' ? 'or' : 'and')}
+            >
+              {tagFilterMode === 'and' ? '并且' : '或'}
+            </button>
+          )}
         </div>
       )}
 

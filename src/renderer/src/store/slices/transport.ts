@@ -69,6 +69,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     playing: false,
     rate: 1,
     direction: 'paused',
+    previewStart: null,
     previewEnd: null,
     pendingSeekLocal: null,
 
@@ -88,10 +89,15 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     },
 
     syncLocalTime: (local) => {
-      const { videos, activeVideoId, previewEnd } = get()
+      const { videos, activeVideoId, previewEnd, previewStart } = get()
       if (!activeVideoId) return
       const T = videoOffset(videos, activeVideoId) + local
       if (previewEnd != null && T >= previewEnd) {
+        // 选中片段循环播放：回到起点继续（#102）
+        if (previewStart != null) {
+          get().seek(previewStart)
+          return
+        }
         set({ currentTime: previewEnd })
         get().pause()
         return
@@ -146,7 +152,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     pause: () => {
       stopReverse()
       get().videoEl?.pause()
-      set({ playing: false, previewEnd: null })
+      set({ playing: false, previewStart: null, previewEnd: null })
     },
 
     resume: () => {

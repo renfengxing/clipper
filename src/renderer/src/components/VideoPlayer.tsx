@@ -24,12 +24,12 @@ function Subtitle(): JSX.Element | null {
   })
   if (active.length === 0) return null
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none">
+    <div className="absolute inset-x-0 bottom-8 flex flex-col items-center gap-0.5 pointer-events-none">
       {active.map((c) => (
         <div
           key={c.id}
-          className="text-white/45 text-xl font-medium text-center px-4"
-          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}
+          className="text-white/30 text-lg font-medium text-center px-4"
+          style={{ textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}
         >
           {c.title}
         </div>

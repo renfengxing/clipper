@@ -4,6 +4,7 @@ import type { AppState, TagsSlice } from '../types'
 export const createTagsSlice: StateCreator<AppState, [], [], TagsSlice> = (set, get) => ({
   checkedIds: [],
   activeTags: [],
+  tagFilterMode: 'and',
   showCheckedOnly: false,
   videoTags: [],
   defaultTags: [],
@@ -24,6 +25,7 @@ export const createTagsSlice: StateCreator<AppState, [], [], TagsSlice> = (set, 
         : [...s.activeTags, tag]
     })),
   clearActiveTags: () => set({ activeTags: [] }),
+  setTagFilterMode: (m) => set({ tagFilterMode: m }),
   setShowCheckedOnly: (v) => set({ showCheckedOnly: v }),
   setDefaultTags: (tags) => set({ defaultTags: tags }),
 

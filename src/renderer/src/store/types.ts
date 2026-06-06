@@ -24,7 +24,8 @@ export interface TransportSlice {
   playing: boolean
   rate: number
   direction: Direction
-  previewEnd: number | null // 全局停止点
+  previewStart: number | null // 预览/循环起点（全局）
+  previewEnd: number | null // 预览/循环终点（全局）
   pendingSeekLocal: number | null // 切 src 后待应用的局部 seek
   setVideoEl: (el: HTMLVideoElement | null) => void
   syncLocalTime: (local: number) => void // <video> timeupdate → 全局
@@ -67,6 +68,7 @@ export interface ClipsSlice {
 export interface TagsSlice {
   checkedIds: string[]
   activeTags: string[]
+  tagFilterMode: 'and' | 'or' // 多标签过滤：并且/或（#101，默认并且）
   showCheckedOnly: boolean
   videoTags: string[]
   defaultTags: string[]
@@ -76,6 +78,7 @@ export interface TagsSlice {
   clearChecked: () => void
   toggleActiveTag: (tag: string) => void
   clearActiveTags: () => void
+  setTagFilterMode: (m: 'and' | 'or') => void
   setShowCheckedOnly: (v: boolean) => void
   setDefaultTags: (tags: string[]) => void
   addVideoTag: (tag: string) => void
