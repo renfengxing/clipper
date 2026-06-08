@@ -14,6 +14,8 @@ interface RawTimeline {
   video_tags?: string[]
   exports?: Record<string, string>
   last_export_dir?: string | null
+  report?: string
+  report_at?: string | null
 }
 
 export const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = (set, get) => ({
@@ -23,11 +25,14 @@ export const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = 
   projectLoaded: false,
   exportHistory: {},
   lastExportDir: null,
+  report: '',
+  reportAt: null,
 
   setExportHistory: (h) => set({ exportHistory: h }),
   setLastExportDir: (dir) => set({ lastExportDir: dir }),
   setTitleTemplate: (t) => set({ titleTemplate: t }),
   setSavedAt: (iso) => set({ savedAt: iso }),
+  setReport: (text) => set({ report: text, reportAt: new Date().toISOString() }),
 
   // 时间线只含视频摆放顺序；片段由 video 切片从各 sidecar 载入（#96）。video.id 每次会话新生成。
   hydrateProject: (raw, fallbackName) => {
@@ -64,6 +69,8 @@ export const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = 
         exportHistory: data.exports || {},
         lastExportDir: data.last_export_dir ?? null,
         videoTags: data.video_tags ?? [...get().defaultTags],
+        report: data.report || '',
+        reportAt: data.report_at ?? null,
         projectLoaded: true
       })
     } else {

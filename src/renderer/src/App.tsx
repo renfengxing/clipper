@@ -39,10 +39,16 @@ function App(): JSX.Element {
   useAutoSave()
 
   useEffect(() => {
-    window.api.getSettings().then((s) => {
+    window.api.getSettings().then(async (s) => {
       setTitleTemplate(s.title_template || '')
       if (s.keybindings) setKeybindings(s.keybindings)
       if (s.default_tags) setDefaultTags(s.default_tags)
+      // #109：恢复上次打开的时间线（重启/重载/休眠回来后不丢）
+      if (s.last_timeline && useStore.getState().videos.length === 0) {
+        if (await window.api.fileExists(s.last_timeline)) {
+          await useStore.getState().openVideoPath(s.last_timeline)
+        }
+      }
     })
   }, [setTitleTemplate, setKeybindings, setDefaultTags])
 

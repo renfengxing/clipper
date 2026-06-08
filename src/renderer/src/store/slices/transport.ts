@@ -133,6 +133,8 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
       }
     },
 
+    clearPreview: () => set({ previewStart: null, previewEnd: null }),
+
     play: () => {
       const { videos } = get()
       if (videos.length === 0) return

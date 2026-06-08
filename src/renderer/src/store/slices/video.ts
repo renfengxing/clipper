@@ -32,6 +32,8 @@ function resetState(): Partial<AppState> {
     projectLoaded: false,
     exportHistory: {},
     lastExportDir: null,
+    report: '',
+    reportAt: null,
     checkedIds: [],
     activeTags: [],
     showCheckedOnly: false,
@@ -115,6 +117,7 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         patch.projectLoaded = true
         if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
         void window.api.addRecentFile(patch.timelinePath)
+        void window.api.setSettings({ last_timeline: patch.timelinePath }) // #109
       }
       set(patch)
     },
@@ -163,6 +166,7 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         get().hydrateProject(raw, stripExt(basename(path)))
         set({ timelinePath: path })
         void window.api.addRecentFile(path)
+        void window.api.setSettings({ last_timeline: path }) // #109
         // 旧格式内嵌了 clips（hydrate 已迁移）→ 不再覆盖；否则从各 sidecar 载入
         if (get().clips.length === 0) await loadAllSidecars()
         return
@@ -182,6 +186,7 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
     closeVideo: () => {
       get().pause()
       set(resetState())
+      void window.api.setSettings({ last_timeline: '' }) // #109：显式关闭后不再自动恢复
     }
   }
 }

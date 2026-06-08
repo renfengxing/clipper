@@ -17,6 +17,7 @@ export interface Settings {
   keybindings: Keybindings
   recent_files?: string[]
   default_tags: string[]
+  last_timeline?: string
 }
 
 

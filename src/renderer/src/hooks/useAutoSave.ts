@@ -14,6 +14,7 @@ export function useAutoSave(): void {
   const videoTags = useStore((s) => s.videoTags)
   const exportHistory = useStore((s) => s.exportHistory)
   const lastExportDir = useStore((s) => s.lastExportDir)
+  const report = useStore((s) => s.report)
   const projectLoaded = useStore((s) => s.projectLoaded)
   const timelinePath = useStore((s) => s.timelinePath)
 
@@ -64,7 +65,9 @@ export function useAutoSave(): void {
           })),
           video_tags: s.videoTags,
           exports: s.exportHistory,
-          last_export_dir: s.lastExportDir
+          last_export_dir: s.lastExportDir,
+          report: s.report,
+          report_at: s.reportAt
         })
         useStore.getState().setSavedAt(new Date().toISOString())
       } catch (err) {
@@ -72,5 +75,5 @@ export function useAutoSave(): void {
       }
     }, 500)
     return () => window.clearTimeout(timer)
-  }, [clips, videos, timelineName, videoTags, exportHistory, lastExportDir, projectLoaded, timelinePath])
+  }, [clips, videos, timelineName, videoTags, exportHistory, lastExportDir, report, projectLoaded, timelinePath])
 }

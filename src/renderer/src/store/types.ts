@@ -32,6 +32,7 @@ export interface TransportSlice {
   onVideoEnded: () => void // 当前视频播完 → 跨到下一个
   applyPendingSeek: () => void // 新 src 元数据就绪后应用待定 seek
   seek: (globalT: number) => void
+  clearPreview: () => void // 停止"选中片段循环"（手动 scrub 时用，#108）
   play: () => void
   pause: () => void
   resume: () => void
@@ -96,10 +97,13 @@ export interface ProjectSlice {
   projectLoaded: boolean
   exportHistory: Record<string, string>
   lastExportDir: string | null
+  report: string // 已生成的 AI 分析报告（随时间线保存，#107）
+  reportAt: string | null
   setExportHistory: (h: Record<string, string>) => void
   setLastExportDir: (dir: string) => void
   setTitleTemplate: (t: string) => void
   setSavedAt: (iso: string) => void
+  setReport: (text: string) => void
   hydrateProject: (raw: unknown, fallbackName: string) => void // 兼容 v2 与旧 .kkfb.json
 }
 

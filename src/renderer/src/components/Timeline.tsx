@@ -19,6 +19,7 @@ export function Timeline(): JSX.Element {
   const clips = useStore((s) => s.clips)
   const currentTime = useStore((s) => s.currentTime)
   const seek = useStore((s) => s.seek)
+  const clearPreview = useStore((s) => s.clearPreview)
   const markIn = useStore((s) => s.markIn)
   const markOut = useStore((s) => s.markOut)
   const selectedClipId = useStore((s) => s.selectedClipId)
@@ -76,6 +77,7 @@ export function Timeline(): JSX.Element {
   const onPointerDown = (e: React.PointerEvent): void => {
     if (total <= 0) return
     draggingRef.current = true
+    clearPreview() // 手动拖动游标 → 停止片段循环，可自由跨视频（#108）
     e.currentTarget.setPointerCapture(e.pointerId)
     seek(timeFromClientX(e.clientX))
   }
@@ -290,7 +292,10 @@ export function Timeline(): JSX.Element {
                       setOverIdx(null)
                       setDraggingSegment(false)
                     }}
-                    onClick={() => seek(videoOffset(videos, v.id))}
+                    onClick={() => {
+                      clearPreview()
+                      seek(videoOffset(videos, v.id))
+                    }}
                     title={`${v.fileName}（拖动可调整顺序）`}
                     className={[
                       'group absolute top-0 bottom-0 pl-1 pr-4 text-[10px] leading-5 truncate cursor-grab rounded-sm border',

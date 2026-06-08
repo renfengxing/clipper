@@ -20,6 +20,7 @@ export interface Settings {
   keybindings: Keybindings
   recent_files: string[] // 最近打开（最多 10，#41）
   default_tags: string[] // 系统标签库（#54，每个 ≤15 字）
+  last_timeline: string // 上次打开的时间线（.kkclip 路径），用于重启/重载后恢复（#109）
 }
 
 const DEFAULTS: Settings = {
@@ -36,7 +37,8 @@ const DEFAULTS: Settings = {
     playPause: 'Space'
   },
   recent_files: [],
-  default_tags: ['进球', '助攻', '过人', '射门', '防守', '失误', '扑救', '任意球']
+  default_tags: ['进球', '助攻', '过人', '射门', '防守', '失误', '扑救', '任意球'],
+  last_timeline: ''
 }
 
 /** 加入最近打开列表（去重、最近在前、最多 10，#41） */
