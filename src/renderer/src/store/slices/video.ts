@@ -110,10 +110,11 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         patch.currentTime = 0
       }
       if (cur.length === 0 && added[0]) {
+        // 时间线按"视频"建，避免同目录多场比赛互相串（<视频名>.kkclip）
         const dir = dirOf(added[0].path)
-        const folderName = basename(dir) || stripExt(added[0].fileName)
-        patch.timelineName = folderName
-        patch.timelinePath = dir + '/' + folderName + '.kkclip'
+        const base = stripExt(added[0].fileName)
+        patch.timelineName = base
+        patch.timelinePath = dir + '/' + base + '.kkclip'
         patch.projectLoaded = true
         if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
         void window.api.addRecentFile(patch.timelinePath)
@@ -172,13 +173,23 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         return
       }
       const dir = dirOf(path)
-      const folderName = basename(dir) || stripExt(basename(path))
-      const kkclip = dir + '/' + folderName + '.kkclip'
-      if (await window.api.fileExists(kkclip)) {
-        await get().openVideoPath(kkclip)
+      const base = stripExt(basename(path))
+      // 1) 该视频自己的时间线
+      const videoKk = dir + '/' + base + '.kkclip'
+      if (await window.api.fileExists(videoKk)) {
+        await get().openVideoPath(videoKk)
         return
       }
-      // 新建单视频时间线（addVideosFromPaths 会自动载入该视频 sidecar 的片段）
+      // 2) 兼容旧的"文件夹时间线"：仅当它确实包含这个视频时才用它
+      const folderKk = dir + '/' + (basename(dir) || base) + '.kkclip'
+      if (folderKk !== videoKk && (await window.api.fileExists(folderKk))) {
+        const raw = (await window.api.loadProject(folderKk)) as { videos?: Array<{ path: string }> } | null
+        if (raw && Array.isArray(raw.videos) && raw.videos.some((v) => v.path === path)) {
+          await get().openVideoPath(folderKk)
+          return
+        }
+      }
+      // 3) 新建"按视频"的时间线（addVideosFromPaths 会自动载入该视频 sidecar 的片段）
       set(resetState())
       await get().addVideosFromPaths([path])
     },
