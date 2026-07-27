@@ -7,7 +7,11 @@ import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/
  * 手机时间线：多视频分段 + 片段色条 + 待标记高亮 + 游标。
  * 触摸拖动 = scrub（手指按下即停止片段循环，便于跨视频）。
  */
-export function Timeline(): JSX.Element | null {
+interface TimelineProps {
+  floating?: boolean
+}
+
+export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const videos = useStore((s) => s.videos)
   const clips = useStore((s) => s.clips)
   const currentTime = useStore((s) => s.currentTime)
@@ -55,7 +59,7 @@ export function Timeline(): JSX.Element | null {
   const segs = ordered(videos)
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, floating && s.wrapFloat]}>
       {/* 视频分段标签 */}
       {segs.length > 1 && (
         <View style={[s.segRow, { width }]}>
@@ -76,7 +80,7 @@ export function Timeline(): JSX.Element | null {
         </View>
       )}
 
-      <View style={s.track} onLayout={onLayout} {...pan.panHandlers}>
+      <View style={[s.track, floating && s.trackFloat]} onLayout={onLayout} {...pan.panHandlers}>
         {/* 分段分界线 */}
         {segs.slice(1).map((v) => (
           <View key={v.id} style={[s.divider, { left: pct(videoOffset(videos, v.id)) }]} />
@@ -106,6 +110,7 @@ export function Timeline(): JSX.Element | null {
 
 const s = StyleSheet.create({
   wrap: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 2 },
+  wrapFloat: { paddingHorizontal: 12, paddingBottom: 0 },
   segRow: { height: 14, marginBottom: 3 },
   seg: {
     position: 'absolute',
@@ -119,6 +124,7 @@ const s = StyleSheet.create({
   segActive: { backgroundColor: '#334155' },
   segText: { color: '#94a3b8', fontSize: 9 },
   track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6, overflow: 'hidden' },
+  trackFloat: { height: 34, backgroundColor: 'rgba(30,41,59,0.6)' },
   divider: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#475569' },
   clip: { position: 'absolute', top: 4, bottom: 4, backgroundColor: 'rgba(59,130,246,0.8)', borderRadius: 2 },
   clipActive: { backgroundColor: '#22d3ee' },

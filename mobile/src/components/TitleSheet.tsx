@@ -35,10 +35,9 @@ export function TitleSheet(): JSX.Element | null {
   const lo = Math.min(markIn, markOut)
   const hi = Math.max(markIn, markOut)
   const candidates = Array.from(new Set([...videoTags, ...defaultTags]))
-  // 人名（2~4 个汉字、非动作词）放前排；其余当事件标签
-  const isName = (t: string): boolean => /^[一-龥]{2,4}$/.test(t) && videoTags.includes(t)
-  const names = candidates.filter(isName)
-  const events = candidates.filter((t) => !isName(t))
+  // 分组：系统默认标签 = 事件；用户自建的（不在默认库里）= 人名/自定义，放前排更好点
+  const events = candidates.filter((t) => defaultTags.includes(t))
+  const names = candidates.filter((t) => !defaultTags.includes(t))
 
   const toggle = (t: string): void =>
     setTags((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]))
@@ -67,12 +66,16 @@ export function TitleSheet(): JSX.Element | null {
         <ScrollView style={{ maxHeight: 260 }}>
           {names.length > 0 && (
             <>
-              <Text style={s.label}>谁</Text>
+              <Text style={s.label}>谁 / 自定义</Text>
               <View style={s.chips}>{names.map(chip)}</View>
             </>
           )}
-          <Text style={s.label}>做了什么</Text>
-          <View style={s.chips}>{events.map(chip)}</View>
+          {events.length > 0 && (
+            <>
+              <Text style={s.label}>做了什么</Text>
+              <View style={s.chips}>{events.map(chip)}</View>
+            </>
+          )}
         </ScrollView>
 
         <View style={s.preview}>
