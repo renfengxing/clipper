@@ -87,7 +87,7 @@ function HotkeyHint(): JSX.Element {
 export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.Element {
   const active = useStore(selectActiveVideo)
   const videos = useStore((s) => s.videos)
-  const setVideoEl = useStore((s) => s.setVideoEl)
+  const setPlayer = useStore((s) => s.setPlayer)
   const applyPendingSeek = useStore((s) => s.applyPendingSeek)
   const syncLocalTime = useStore((s) => s.syncLocalTime)
   const onVideoEnded = useStore((s) => s.onVideoEnded)
@@ -96,7 +96,26 @@ export function VideoPlayer({ isFullscreen, onToggleFullscreen }: Props): JSX.El
   const openVideoPath = useStore((s) => s.openVideoPath)
   const closeVideo = useStore((s) => s.closeVideo)
 
-  const refCb = useCallback((el: HTMLVideoElement | null) => setVideoEl(el), [setVideoEl])
+  // 把 <video> 包成 Player 端口交给 store（iOS 端会包 react-native-video 的 ref）
+  const refCb = useCallback(
+    (el: HTMLVideoElement | null) => {
+      setPlayer(
+        el
+          ? {
+              seekLocal: (sec) => {
+                el.currentTime = sec
+              },
+              play: () => void el.play(),
+              pause: () => el.pause(),
+              setRate: (r) => {
+                el.playbackRate = r
+              }
+            }
+          : null
+      )
+    },
+    [setPlayer]
+  )
 
   const [recent, setRecent] = useState<string[]>([])
   useEffect(() => {

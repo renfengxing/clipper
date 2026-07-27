@@ -102,10 +102,10 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     get().seek(globalIn)
     // previewStart 非空 → 到 out 自动回到 in 循环（#102）
     set({ previewStart: globalIn, previewEnd: globalOut, playing: true, direction: 'forward', rate: 1 })
-    const el = get().videoEl
-    if (el) {
-      el.playbackRate = 1
-      void el.play()
+    const p = get().player
+    if (p) {
+      p.setRate(1)
+      p.play()
     }
   },
 

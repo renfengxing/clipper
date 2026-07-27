@@ -18,7 +18,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
 
   // 倒放：手动回退全局 currentTime，并把当前所在视频的 <video> 定位到局部时间（跨文件切 src）
   const reverseTick = (ts: number): void => {
-    const { videoEl, rate, videos, activeVideoId } = get()
+    const { player, rate, videos, activeVideoId } = get()
     if (videos.length === 0) return stopReverse()
     if (lastTs) {
       const dt = (ts - lastTs) / 1000
@@ -27,14 +27,14 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
         const first = ordered(videos)[0]
         set({ currentTime: 0, playing: false, direction: 'paused', rate: 1 })
         if (first && activeVideoId !== first.id) set({ activeVideoId: first.id, pendingSeekLocal: 0 })
-        else if (videoEl) videoEl.currentTime = 0
+        else player?.seekLocal(0)
         return stopReverse()
       }
       const loc = globalToLocal(videos, T)
       set({ currentTime: T })
       if (loc) {
         if (loc.video.id === activeVideoId) {
-          if (videoEl) videoEl.currentTime = loc.local
+          player?.seekLocal(loc.local)
         } else {
           set({ activeVideoId: loc.video.id, pendingSeekLocal: loc.local })
         }
@@ -45,13 +45,13 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
   }
 
   const applySigned = (v: number): void => {
-    const el = get().videoEl
+    const el = get().player
     if (v > 0) {
       stopReverse()
       set({ playing: true, direction: 'forward', rate: v })
       if (el) {
-        el.playbackRate = v
-        void el.play()
+        el.setRate(v)
+        el.play()
       }
     } else if (v < 0) {
       stopReverse()
@@ -64,7 +64,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
   }
 
   return {
-    videoEl: null,
+    player: null,
     currentTime: 0,
     playing: false,
     rate: 1,
@@ -73,18 +73,18 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     previewEnd: null,
     pendingSeekLocal: null,
 
-    setVideoEl: (el) => set({ videoEl: el }),
+    setPlayer: (p) => set({ player: p }),
 
     applyPendingSeek: () => {
-      const { videoEl, pendingSeekLocal, playing, direction, rate } = get()
-      if (!videoEl) return
+      const { player, pendingSeekLocal, playing, direction, rate } = get()
+      if (!player) return
       if (pendingSeekLocal != null) {
-        videoEl.currentTime = pendingSeekLocal
+        player.seekLocal(pendingSeekLocal)
         set({ pendingSeekLocal: null })
       }
       if (playing && direction === 'forward') {
-        videoEl.playbackRate = rate
-        void videoEl.play()
+        player.setRate(rate)
+        player.play()
       }
     },
 
@@ -126,8 +126,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
       if (!loc) return
       set({ currentTime: T })
       if (loc.video.id === get().activeVideoId) {
-        const el = get().videoEl
-        if (el) el.currentTime = loc.local
+        get().player?.seekLocal(loc.local)
       } else {
         set({ activeVideoId: loc.video.id, pendingSeekLocal: loc.local })
       }
@@ -144,16 +143,16 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
       }
       stopReverse()
       set({ playing: true, direction: 'forward', rate: 1 })
-      const el = get().videoEl
+      const el = get().player
       if (el) {
-        el.playbackRate = 1
-        void el.play()
+        el.setRate(1)
+        el.play()
       }
     },
 
     pause: () => {
       stopReverse()
-      get().videoEl?.pause()
+      get().player?.pause()
       set({ playing: false, previewStart: null, previewEnd: null })
     },
 

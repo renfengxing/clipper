@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, TagsSlice } from '../types'
+import { platform } from '../../core/ports'
 
 export const createTagsSlice: StateCreator<AppState, [], [], TagsSlice> = (set, get) => ({
   checkedIds: [],
@@ -65,7 +66,7 @@ export const createTagsSlice: StateCreator<AppState, [], [], TagsSlice> = (set, 
     const { clips, videoTags } = get()
     if (clips.length === 0) return { ok: false, error: '没有片段' }
     set({ aiTagging: true })
-    const res = await window.api.autoTag(
+    const res = await platform().autoTag(
       clips.map((c) => ({ title: c.title })),
       videoTags
     )

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../store/useStore'
+import { platform } from '../core/ports'
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -66,7 +67,7 @@ export function useGlobalShortcuts(): void {
           e.preventDefault()
           // 标记中：取消标记（全屏不退）；非标记：可退全屏；否则取消选中
           if (s.markIn != null || s.markOut != null) s.clearMarks()
-          else if (s.isFullscreen) void window.api.toggleFullscreen()
+          else if (s.isFullscreen) platform().toggleFullscreen?.()
           else if (s.selectedClipId) s.deselectClip()
           break
         case 'Delete':
@@ -84,7 +85,7 @@ export function useGlobalShortcuts(): void {
           break
         case 'KeyM':
           e.preventDefault()
-          void window.api.toggleFullscreen()
+          platform().toggleFullscreen?.()
           break
         default:
           break

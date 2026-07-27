@@ -1,13 +1,9 @@
 import type { StateCreator } from 'zustand'
 import type { SourceVideo, Clip } from '../../types'
 import type { AppState, VideoSlice } from '../types'
-import { toMediaUrl, basename, dirOf, stripExt } from '../../utils/media'
+import { basename, dirOf, stripExt } from '../../utils/media'
 import { ordered, videoOffset } from '../../utils/timeline'
-
-/** 片段随视频存：<视频>.kkfb.json（#96） */
-function sidecarPath(videoPath: string): string {
-  return videoPath + '.kkfb.json'
-}
+import { platform } from '../../core/ports'
 
 function resetState(): Partial<AppState> {
   return {
@@ -42,13 +38,22 @@ function resetState(): Partial<AppState> {
 }
 
 async function probeToSource(path: string, order: number): Promise<SourceVideo> {
-  const { duration, fps } = await window.api.probeVideo(path)
-  return { id: crypto.randomUUID(), path, fileName: basename(path), url: toMediaUrl(path), duration, fps, order }
+  const p = platform()
+  const { duration, fps } = await p.probeVideo(path)
+  return {
+    id: crypto.randomUUID(),
+    path,
+    fileName: p.displayName(path),
+    url: p.resolveUrl(path),
+    duration,
+    fps,
+    order
+  }
 }
 
-/** 读取某视频的 sidecar，得到（内存版）片段 + 该视频携带的标签词表 */
+/** 读取某视频的片段数据（桌面=旁边的 sidecar），得到片段 + 该视频携带的标签词表 */
 async function loadSidecar(video: SourceVideo): Promise<{ clips: Clip[]; tags: string[] }> {
-  const raw = (await window.api.loadProject(sidecarPath(video.path))) as {
+  const raw = (await platform().loadData(platform().clipsKeyFor(video.path))) as {
     clips?: Array<{ id?: string; in: number; out: number; title?: string; order?: number; created_at?: string; tags?: string[] }>
     video_tags?: string[]
   } | null
@@ -117,14 +122,14 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
         patch.timelinePath = dir + '/' + base + '.kkclip'
         patch.projectLoaded = true
         if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
-        void window.api.addRecentFile(patch.timelinePath)
-        void window.api.setSettings({ last_timeline: patch.timelinePath }) // #109
+        void platform().addRecent(patch.timelinePath)
+        void platform().setSettings({ last_timeline: patch.timelinePath }) // #109
       }
       set(patch)
     },
 
     chooseAndAddVideos: async () => {
-      const paths = await window.api.chooseVideos()
+      const paths = await platform().pickVideos()
       await get().addVideosFromPaths(paths)
     },
 
@@ -162,12 +167,12 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
 
     openVideoPath: async (path) => {
       if (path.endsWith('.kkclip')) {
-        const raw = await window.api.loadProject(path)
+        const raw = await platform().loadData(path)
         set(resetState())
         get().hydrateProject(raw, stripExt(basename(path)))
         set({ timelinePath: path })
-        void window.api.addRecentFile(path)
-        void window.api.setSettings({ last_timeline: path }) // #109
+        void platform().addRecent(path)
+        void platform().setSettings({ last_timeline: path }) // #109
         // 旧格式内嵌了 clips（hydrate 已迁移）→ 不再覆盖；否则从各 sidecar 载入
         if (get().clips.length === 0) await loadAllSidecars()
         return
@@ -176,14 +181,14 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
       const base = stripExt(basename(path))
       // 1) 该视频自己的时间线
       const videoKk = dir + '/' + base + '.kkclip'
-      if (await window.api.fileExists(videoKk)) {
+      if (await platform().dataExists(videoKk)) {
         await get().openVideoPath(videoKk)
         return
       }
       // 2) 兼容旧的"文件夹时间线"：仅当它确实包含这个视频时才用它
       const folderKk = dir + '/' + (basename(dir) || base) + '.kkclip'
-      if (folderKk !== videoKk && (await window.api.fileExists(folderKk))) {
-        const raw = (await window.api.loadProject(folderKk)) as { videos?: Array<{ path: string }> } | null
+      if (folderKk !== videoKk && (await platform().dataExists(folderKk))) {
+        const raw = (await platform().loadData(folderKk)) as { videos?: Array<{ path: string }> } | null
         if (raw && Array.isArray(raw.videos) && raw.videos.some((v) => v.path === path)) {
           await get().openVideoPath(folderKk)
           return
@@ -197,7 +202,7 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
     closeVideo: () => {
       get().pause()
       set(resetState())
-      void window.api.setSettings({ last_timeline: '' }) // #109：显式关闭后不再自动恢复
+      void platform().setSettings({ last_timeline: '' }) // #109：显式关闭后不再自动恢复
     }
   }
 }

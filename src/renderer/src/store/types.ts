@@ -1,4 +1,5 @@
 import type { Clip, SourceVideo, ProjectData, Keybindings } from '../types'
+import type { Player } from '../core/ports'
 
 export type Direction = 'forward' | 'reverse' | 'paused'
 
@@ -19,7 +20,7 @@ export interface VideoSlice {
 
 /** 播放传输（全局时间线，跨文件） */
 export interface TransportSlice {
-  videoEl: HTMLVideoElement | null
+  player: Player | null
   currentTime: number // 全局时间（跨所有视频）
   playing: boolean
   rate: number
@@ -27,7 +28,7 @@ export interface TransportSlice {
   previewStart: number | null // 预览/循环起点（全局）
   previewEnd: number | null // 预览/循环终点（全局）
   pendingSeekLocal: number | null // 切 src 后待应用的局部 seek
-  setVideoEl: (el: HTMLVideoElement | null) => void
+  setPlayer: (p: Player | null) => void
   syncLocalTime: (local: number) => void // <video> timeupdate → 全局
   onVideoEnded: () => void // 当前视频播完 → 跨到下一个
   applyPendingSeek: () => void // 新 src 元数据就绪后应用待定 seek

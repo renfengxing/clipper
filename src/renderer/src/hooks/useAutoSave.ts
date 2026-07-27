@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../store/useStore'
+import { platform } from '../core/ports'
 import { APP_NAME } from '../constants'
 
 /**
@@ -41,7 +42,7 @@ export function useAutoSave(): void {
               created_at: c.created_at,
               tags: c.tags || []
             }))
-          await window.api.saveProject(v.path + '.kkfb.json', {
+          await platform().saveData(platform().clipsKeyFor(v.path), {
             version: '1.1',
             app_name: APP_NAME,
             clips: vclips,
@@ -50,7 +51,7 @@ export function useAutoSave(): void {
           })
         }
         // 2) 时间线（只存视频顺序）
-        await window.api.saveProject(s.timelinePath, {
+        await platform().saveData(s.timelinePath, {
           version: '2.0',
           app_name: APP_NAME,
           name: s.timelineName,
