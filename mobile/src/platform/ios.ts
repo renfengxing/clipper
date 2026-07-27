@@ -1,7 +1,12 @@
 import * as FileSystem from 'expo-file-system'
 import * as ImagePicker from 'expo-image-picker'
-import * as MediaLibrary from 'expo-media-library'
 import type { Platform, Settings } from '@core/ports'
+
+/**
+ * 选片时缓存元数据：ImagePicker 直接给了 uri 和时长，
+ * 不必再走 MediaLibrary（那需要另一套权限，且相册资源 id 不能直接喂播放器）。
+ */
+const metaCache = new Map<string, { duration: number; fps: number }>()
 
 /**
  * iOS 平台实现。
@@ -69,46 +74,46 @@ async function deepseek(prompt: string, maxTokens: number): Promise<string> {
 export const iosPlatform: Platform = {
   // —— 视频 ——
   async probeVideo(videoRef) {
-    // 相册资产自带时长；帧率 iOS 上默认按 30 兜底（后续可用原生模块取真实 fps）
-    try {
-      const info = await MediaLibrary.getAssetInfoAsync(videoRef)
-      return { duration: info.duration || 0, fps: 30 }
-    } catch {
-      return { duration: 0, fps: 30 }
-    }
+    // 选片时已缓存；缓存没有则返回 0（时间线会等 onLoad 后再修正）
+    const cached = metaCache.get(videoRef)
+    return cached ?? { duration: 0, fps: 30 }
   },
 
   async pickVideos() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) return []
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      allowsMultipleSelection: true,
-      quality: 1
-    })
-    if (res.canceled) return []
-    return res.assets.map((a) => a.assetId || a.uri)
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) return []
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsMultipleSelection: true,
+        quality: 1
+      })
+      if (res.canceled) return []
+      return res.assets.map((a) => {
+        // uri 是 app 沙盒里的 file://，可直接喂 expo-av，也能当稳定 key
+        metaCache.set(a.uri, { duration: (a.duration ?? 0) / 1000, fps: 30 })
+        return a.uri
+      })
+    } catch (err) {
+      console.warn('选择视频失败:', err)
+      return []
+    }
   },
 
-  resolveUrl(videoRef) {
-    // ph:// 形式可直接喂给 expo-av；file:// 原样返回
-    return videoRef.startsWith('file://') || videoRef.startsWith('ph://')
-      ? videoRef
-      : `ph://${videoRef}`
-  },
+  resolveUrl: (videoRef) => videoRef,
 
   async exists(videoRef) {
     try {
-      await MediaLibrary.getAssetInfoAsync(videoRef)
-      return true
+      const info = await FileSystem.getInfoAsync(videoRef)
+      return info.exists
     } catch {
       return false
     }
   },
 
   displayName(videoRef) {
-    const tail = videoRef.split('/').pop() || videoRef
-    return tail.slice(0, 24)
+    const tail = decodeURIComponent(videoRef.split('/').pop() || videoRef)
+    return tail.length > 28 ? tail.slice(0, 28) + '…' : tail
   },
 
   // —— 工程数据：一律进沙盒（相册旁边写不了）——

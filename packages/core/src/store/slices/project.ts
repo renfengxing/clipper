@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { uuid } from '../../utils/id'
 import type { Clip } from '../../types'
 import type { AppState, ProjectSlice } from '../types'
 import { platform } from '../../ports'
@@ -40,14 +41,14 @@ export const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = 
     if (data && Array.isArray(data.videos)) {
       // 复用旧格式里存的 video.id（便于内嵌 clips 的 videoId 对上）
       const videos = ordered(
-        data.videos.map((v) => ({ ...v, id: v.id || crypto.randomUUID(), url: platform().resolveUrl(v.path) }))
+        data.videos.map((v) => ({ ...v, id: v.id || uuid(), url: platform().resolveUrl(v.path) }))
       ).map((v, i) => ({ ...v, order: i }))
       const ids = new Set(videos.map((v) => v.id))
       const iso = new Date().toISOString()
       // 旧格式 .kkclip 内嵌 clips（含 tags）→ 迁移进来，避免丢标签（#96 兼容）
       const embedded: Clip[] = Array.isArray(data.clips)
         ? data.clips.map((c, i) => ({
-            id: c.id || crypto.randomUUID(),
+            id: c.id || uuid(),
             videoId: c.videoId && ids.has(c.videoId) ? c.videoId : videos[0]?.id || '',
             in: c.in,
             out: c.out,

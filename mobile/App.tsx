@@ -6,6 +6,7 @@ import { Video, ResizeMode } from 'expo-av'
 import { useStore, selectActiveVideo } from '@core/store/useStore'
 import { fmtClock, fmtMs } from '@core/utils/time'
 import { totalDuration } from '@core/utils/timeline'
+import { TitleSheet } from './src/components/TitleSheet'
 
 /**
  * iOS 首屏（骨架）：验证共享 core 在 RN 里跑通 —— 相册选视频 → 探测时长
@@ -27,7 +28,6 @@ export default function App(): JSX.Element {
   const togglePlay = useStore((s) => s.togglePlay)
   const setMarkIn = useStore((s) => s.setMarkIn)
   const setMarkOut = useStore((s) => s.setMarkOut)
-  const addClip = useStore((s) => s.addClip)
   const clearMarks = useStore((s) => s.clearMarks)
 
   const videoRef = useRef<Video>(null)
@@ -59,11 +59,7 @@ export default function App(): JSX.Element {
   // 标记大按钮：一下起点、再一下终点（终点后直接用标签拼的占位标题存下）
   const onMarkPress = (): void => {
     if (markIn == null) setMarkIn()
-    else {
-      setMarkOut()
-      // 骨架版先存占位标题；命名 sheet 下一步做
-      setTimeout(() => addClip(`片段 ${clips.length + 1}`), 0)
-    }
+    else setMarkOut() // 自动弹出命名弹层
   }
 
   return (
@@ -141,6 +137,8 @@ export default function App(): JSX.Element {
           </View>
         ))}
       </ScrollView>
+
+      <TitleSheet />
     </SafeAreaView>
   )
 }

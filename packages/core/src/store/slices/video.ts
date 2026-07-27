@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { uuid } from '../../utils/id'
 import type { SourceVideo, Clip } from '../../types'
 import type { AppState, VideoSlice } from '../types'
 import { basename, dirOf, stripExt } from '../../utils/path'
@@ -41,7 +42,7 @@ async function probeToSource(path: string, order: number): Promise<SourceVideo> 
   const p = platform()
   const { duration, fps } = await p.probeVideo(path)
   return {
-    id: crypto.randomUUID(),
+    id: uuid(),
     path,
     fileName: p.displayName(path),
     url: p.resolveUrl(path),
@@ -63,7 +64,7 @@ async function loadSidecar(video: SourceVideo): Promise<{ clips: Clip[]; tags: s
     .slice()
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((c) => ({
-      id: c.id || crypto.randomUUID(),
+      id: c.id || uuid(),
       videoId: video.id,
       in: c.in,
       out: c.out,

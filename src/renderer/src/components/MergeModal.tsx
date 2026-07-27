@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '@core/store/useStore'
 import type { ExportProgress } from '@core/types'
 import { APP_NAME } from '@core/constants'
+import { uuid } from '@core/utils/id'
 import { dirOf, basename } from '../utils/media'
 import { ordered } from '@core/utils/timeline'
 
@@ -72,7 +73,7 @@ export function MergeModal(): JSX.Element | null {
       let acc = 0
       const mclips = selected.map((c, i) => {
         const len = c.out - c.in
-        const clip = { id: crypto.randomUUID(), in: acc, out: acc + len, title: c.title, order: i, created_at: iso, tags: c.tags || [] }
+        const clip = { id: uuid(), in: acc, out: acc + len, title: c.title, order: i, created_at: iso, tags: c.tags || [] }
         acc += len
         return clip
       })

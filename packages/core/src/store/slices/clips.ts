@@ -1,4 +1,5 @@
 import type { StateCreator } from 'zustand'
+import { uuid } from '../../utils/id'
 import type { Clip } from '../../types'
 import type { AppState, ClipsSlice } from '../types'
 import { globalToLocal, localToGlobal, videoOffset } from '../../utils/timeline'
@@ -70,7 +71,7 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
       new Set((tags || []).map((x) => x.trim().slice(0, 15)).filter(Boolean))
     )
     const clip: Clip = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       videoId: loc.video.id,
       in: inLocal,
       out: outLocal,
