@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import * as Haptics from 'expo-haptics'
 import { Video, ResizeMode } from 'expo-av'
 import { useStore, selectActiveVideo } from '@core/store/useStore'
+import { platform } from '@core/ports'
 import { fmtClock, fmtMs } from '@core/utils/time'
 import { totalDuration } from '@core/utils/timeline'
 import { TitleSheet } from './src/components/TitleSheet'
+import { Timeline } from './src/components/Timeline'
+import { ClipList } from './src/components/ClipList'
 
-/**
- * iOS 首屏（骨架）：验证共享 core 在 RN 里跑通 —— 相册选视频 → 探测时长
- * → 时间线数学 → 大按钮标记 → 片段列表。UI 后续按设计稿细化。
- */
 export default function App(): JSX.Element {
   const videos = useStore((s) => s.videos)
   const clips = useStore((s) => s.clips)
   const active = useStore(selectActiveVideo)
   const currentTime = useStore((s) => s.currentTime)
   const playing = useStore((s) => s.playing)
+  const rate = useStore((s) => s.rate)
+  const direction = useStore((s) => s.direction)
   const markIn = useStore((s) => s.markIn)
   const markOut = useStore((s) => s.markOut)
 
@@ -25,13 +27,28 @@ export default function App(): JSX.Element {
   const setPlayer = useStore((s) => s.setPlayer)
   const syncLocalTime = useStore((s) => s.syncLocalTime)
   const onVideoEnded = useStore((s) => s.onVideoEnded)
+  const applyPendingSeek = useStore((s) => s.applyPendingSeek)
   const togglePlay = useStore((s) => s.togglePlay)
+  const speedUp = useStore((s) => s.speedUp)
+  const resetSpeed = useStore((s) => s.resetSpeed)
+  const jump = useStore((s) => s.jump)
   const setMarkIn = useStore((s) => s.setMarkIn)
   const setMarkOut = useStore((s) => s.setMarkOut)
   const clearMarks = useStore((s) => s.clearMarks)
+  const setDefaultTags = useStore((s) => s.setDefaultTags)
 
   const videoRef = useRef<Video>(null)
   const [ready, setReady] = useState(false)
+
+  // 启动读设置：默认标签是「标签优先」命名流的前提
+  useEffect(() => {
+    platform()
+      .getSettings()
+      .then((st) => {
+        if (st.default_tags?.length) setDefaultTags(st.default_tags)
+      })
+      .catch(() => {})
+  }, [setDefaultTags])
 
   // 把 expo-av 的 ref 包成 Player 端口交给共享 store（与桌面 <video> 对称）
   useEffect(() => {
@@ -55,12 +72,15 @@ export default function App(): JSX.Element {
 
   const total = totalDuration(videos)
   const marking = markIn != null && markOut == null
+  const elapsed = marking ? currentTime - (markIn ?? 0) : 0
 
-  // 标记大按钮：一下起点、再一下终点（终点后直接用标签拼的占位标题存下）
   const onMarkPress = (): void => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     if (markIn == null) setMarkIn()
     else setMarkOut() // 自动弹出命名弹层
   }
+
+  const rateLabel = playing && rate !== 1 ? `${direction === 'reverse' ? '◀ ' : ''}${rate}x` : null
 
   return (
     <SafeAreaView style={s.root}>
@@ -73,7 +93,10 @@ export default function App(): JSX.Element {
             source={{ uri: active.url }}
             style={s.video}
             resizeMode={ResizeMode.CONTAIN}
-            onLoad={() => setReady(true)}
+            onLoad={() => {
+              setReady(true)
+              applyPendingSeek()
+            }}
             onPlaybackStatusUpdate={(st) => {
               if (!st.isLoaded) return
               syncLocalTime((st.positionMillis || 0) / 1000)
@@ -81,12 +104,12 @@ export default function App(): JSX.Element {
             }}
           />
         ) : (
-          <Text style={s.hint}>还没有视频{'\n'}点下面「从相册添加」开始</Text>
+          <Text style={s.hint}>还没有视频{'\n'}点下面「＋ 相册」开始</Text>
         )}
         {marking && (
           <View style={s.markOverlay} pointerEvents="none">
             <Text style={s.markTitle}>● 正在标记片段</Text>
-            <Text style={s.markSub}>已 {(currentTime - (markIn ?? 0)).toFixed(1)}s</Text>
+            <Text style={s.markSub}>已 {elapsed.toFixed(1)}s</Text>
           </View>
         )}
       </View>
@@ -94,50 +117,55 @@ export default function App(): JSX.Element {
       <View style={s.infoRow}>
         <Text style={s.time}>
           {fmtMs(currentTime)} / {fmtClock(total)}
+          {rateLabel ? `  ${rateLabel}` : ''}
         </Text>
         <Text style={s.meta}>
           {videos.length} 个视频 · {clips.length} 个片段
         </Text>
       </View>
 
+      <Timeline />
+
       <View style={s.controls}>
-        <Pressable style={s.ctrlBtn} onPress={() => togglePlay()}>
+        <Pressable style={s.ctrlBtn} onPress={() => jump(-5)} disabled={!active}>
+          <Text style={s.ctrlText}>-5s</Text>
+        </Pressable>
+        <Pressable style={s.ctrlBtn} onPress={() => togglePlay()} disabled={!active}>
           <Text style={s.ctrlText}>{playing ? '⏸' : '▶'}</Text>
         </Pressable>
+        <Pressable style={s.ctrlBtn} onPress={() => jump(5)} disabled={!active}>
+          <Text style={s.ctrlText}>+5s</Text>
+        </Pressable>
+        <Pressable style={s.ctrlBtn} onPress={() => resetSpeed()} disabled={!active}>
+          <Text style={s.ctrlText}>慢放</Text>
+        </Pressable>
+        <Pressable style={s.ctrlBtn} onPress={() => speedUp()} disabled={!active}>
+          <Text style={s.ctrlText}>快进</Text>
+        </Pressable>
+        <View style={{ flex: 1 }} />
         <Pressable style={s.ctrlBtn} onPress={() => void chooseAndAddVideos()}>
           <Text style={s.ctrlText}>＋ 相册</Text>
         </Pressable>
+      </View>
+
+      <View style={s.markRow}>
+        <Pressable
+          style={[s.markBtn, marking ? s.markBtnEnd : s.markBtnStart, !active && s.markBtnOff]}
+          onPress={onMarkPress}
+          disabled={!active}
+        >
+          <Text style={s.markBtnText}>
+            {marking ? `■ 标记终点 · ${elapsed.toFixed(1)}s` : '◉ 标记起点'}
+          </Text>
+        </Pressable>
         {marking && (
-          <Pressable style={s.ctrlBtn} onPress={() => clearMarks()}>
-            <Text style={s.ctrlText}>取消</Text>
+          <Pressable style={s.cancelBtn} onPress={() => clearMarks()}>
+            <Text style={s.cancelText}>取消</Text>
           </Pressable>
         )}
       </View>
 
-      <Pressable
-        style={[s.markBtn, marking ? s.markBtnEnd : s.markBtnStart]}
-        onPress={onMarkPress}
-        disabled={!active}
-      >
-        <Text style={s.markBtnText}>
-          {marking ? `■ 标记终点 · ${(currentTime - (markIn ?? 0)).toFixed(1)}s` : '◉ 标记起点'}
-        </Text>
-      </Pressable>
-
-      <ScrollView style={s.list}>
-        {clips.map((c, i) => (
-          <View key={c.id} style={s.clipRow}>
-            <Text style={s.clipIdx}>{i + 1}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={s.clipTitle}>{c.title || '未命名片段'}</Text>
-              <Text style={s.clipMeta}>
-                {fmtClock(c.in)} - {fmtClock(c.out)} · {(c.out - c.in).toFixed(1)}s
-              </Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-
+      <ClipList />
       <TitleSheet />
     </SafeAreaView>
   )
@@ -145,39 +173,29 @@ export default function App(): JSX.Element {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0f172a' },
-  videoBox: { height: 220, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  videoBox: { height: 210, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   video: { width: '100%', height: '100%' },
   hint: { color: '#64748b', textAlign: 'center', fontSize: 14, lineHeight: 22 },
   markOverlay: { position: 'absolute', alignItems: 'center' },
-  markTitle: { color: 'rgba(255,255,255,0.6)', fontSize: 20, fontWeight: '500' },
+  markTitle: { color: 'rgba(255,255,255,0.6)', fontSize: 19, fontWeight: '500' },
   markSub: { color: 'rgba(255,255,255,0.45)', fontSize: 14, marginTop: 4 },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#1e293b'
+    paddingVertical: 7
   },
-  time: { color: '#cbd5e1', fontSize: 13, fontVariant: ['tabular-nums'] },
-  meta: { color: '#64748b', fontSize: 12 },
-  controls: { flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  ctrlBtn: { backgroundColor: '#334155', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16 },
-  ctrlText: { color: '#e2e8f0', fontSize: 15 },
-  markBtn: { marginHorizontal: 14, marginBottom: 10, borderRadius: 12, paddingVertical: 18, alignItems: 'center' },
+  time: { color: '#cbd5e1', fontSize: 12, fontVariant: ['tabular-nums'] },
+  meta: { color: '#64748b', fontSize: 11 },
+  controls: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingVertical: 8, alignItems: 'center' },
+  ctrlBtn: { backgroundColor: '#334155', borderRadius: 7, paddingVertical: 9, paddingHorizontal: 11 },
+  ctrlText: { color: '#e2e8f0', fontSize: 13 },
+  markRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingBottom: 10 },
+  markBtn: { flex: 1, borderRadius: 12, paddingVertical: 17, alignItems: 'center' },
   markBtnStart: { backgroundColor: '#0891b2' },
   markBtnEnd: { backgroundColor: '#dc2626' },
+  markBtnOff: { opacity: 0.4 },
   markBtnText: { color: '#fff', fontSize: 17, fontWeight: '500' },
-  list: { flex: 1, borderTopWidth: 0.5, borderTopColor: '#1e293b' },
-  clipRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#1e293b'
-  },
-  clipIdx: { color: '#475569', fontSize: 12, width: 20 },
-  clipTitle: { color: '#e2e8f0', fontSize: 14 },
-  clipMeta: { color: '#64748b', fontSize: 11, marginTop: 2 }
+  cancelBtn: { borderWidth: 1, borderColor: '#475569', borderRadius: 12, paddingVertical: 17, paddingHorizontal: 18, justifyContent: 'center' },
+  cancelText: { color: '#94a3b8', fontSize: 15 }
 })
