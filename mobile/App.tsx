@@ -50,25 +50,48 @@ export default function App(): JSX.Element {
       .catch(() => {})
   }, [setDefaultTags])
 
+  // 换视频源时先置为未就绪，等新源 onLoad 再注册 Player（避免对旧源发指令）
+  useEffect(() => {
+    setReady(false)
+  }, [active?.id])
+
   // 把 expo-av 的 ref 包成 Player 端口交给共享 store（与桌面 <video> 对称）
   useEffect(() => {
     if (!ready) return
+    // 拖拽时会高频 seek，expo-av 会把前一个 seek 以 "Seeking interrupted" reject——
+    // 这是预期行为，吞掉即可；同时做轻量节流，减少无谓的原生调用。
+    let seekTimer: ReturnType<typeof setTimeout> | null = null
+    let pendingSec: number | null = null
+    const flushSeek = (): void => {
+      seekTimer = null
+      const sec = pendingSec
+      pendingSec = null
+      if (sec == null) return
+      videoRef.current?.setPositionAsync(sec * 1000).catch(() => {})
+    }
+
     setPlayer({
       seekLocal: (sec) => {
-        void videoRef.current?.setPositionAsync(sec * 1000)
+        pendingSec = sec
+        if (seekTimer == null) seekTimer = setTimeout(flushSeek, 40)
       },
       play: () => {
-        void videoRef.current?.playAsync()
+        videoRef.current?.playAsync().catch(() => {})
       },
       pause: () => {
-        void videoRef.current?.pauseAsync()
+        videoRef.current?.pauseAsync().catch(() => {})
       },
       setRate: (r) => {
-        void videoRef.current?.setRateAsync(r, true)
+        videoRef.current?.setRateAsync(r, true).catch(() => {})
       }
     })
-    return () => setPlayer(null)
-  }, [ready, setPlayer, active?.id])
+    // Player 注册好之后再应用待定 seek（onLoad 时 player 还是 null，那时调用会静默失效）
+    applyPendingSeek()
+    return () => {
+      if (seekTimer) clearTimeout(seekTimer)
+      setPlayer(null)
+    }
+  }, [ready, setPlayer, applyPendingSeek])
 
   const total = totalDuration(videos)
   const marking = markIn != null && markOut == null
@@ -89,14 +112,12 @@ export default function App(): JSX.Element {
       <View style={s.videoBox}>
         {active ? (
           <Video
+            key={active.id}
             ref={videoRef}
             source={{ uri: active.url }}
             style={s.video}
             resizeMode={ResizeMode.CONTAIN}
-            onLoad={() => {
-              setReady(true)
-              applyPendingSeek()
-            }}
+            onLoad={() => setReady(true)}
             onPlaybackStatusUpdate={(st) => {
               if (!st.isLoaded) return
               syncLocalTime((st.positionMillis || 0) / 1000)
