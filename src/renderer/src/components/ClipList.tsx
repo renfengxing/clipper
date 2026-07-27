@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useStore } from '../store/useStore'
-import { fmtClock } from '../utils/time'
-import { ordered, clipGlobalIn } from '../utils/timeline'
+import { useStore } from '@core/store/useStore'
+import { fmtClock } from '@core/utils/time'
+import { ordered, clipGlobalIn } from '@core/utils/timeline'
 
 interface Props {
   width: number

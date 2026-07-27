@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useStore } from '../store/useStore'
+import { useStore } from '@core/store/useStore'
 
 function clockOf(iso: string | null): string {
   if (!iso) return ''

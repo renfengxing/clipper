@@ -1,9 +1,9 @@
 import type { StateCreator } from 'zustand'
 import type { SourceVideo, Clip } from '../../types'
 import type { AppState, VideoSlice } from '../types'
-import { basename, dirOf, stripExt } from '../../utils/media'
+import { basename, dirOf, stripExt } from '../../utils/path'
 import { ordered, videoOffset } from '../../utils/timeline'
-import { platform } from '../../core/ports'
+import { platform } from '../../ports'
 
 function resetState(): Partial<AppState> {
   return {

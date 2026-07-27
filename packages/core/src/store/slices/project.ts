@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { Clip } from '../../types'
 import type { AppState, ProjectSlice } from '../types'
-import { toMediaUrl } from '../../utils/media'
+import { platform } from '../../ports'
 import { ordered } from '../../utils/timeline'
 
 interface RawTimeline {
@@ -40,7 +40,7 @@ export const createProjectSlice: StateCreator<AppState, [], [], ProjectSlice> = 
     if (data && Array.isArray(data.videos)) {
       // 复用旧格式里存的 video.id（便于内嵌 clips 的 videoId 对上）
       const videos = ordered(
-        data.videos.map((v) => ({ ...v, id: v.id || crypto.randomUUID(), url: toMediaUrl(v.path) }))
+        data.videos.map((v) => ({ ...v, id: v.id || crypto.randomUUID(), url: platform().resolveUrl(v.path) }))
       ).map((v, i) => ({ ...v, order: i }))
       const ids = new Set(videos.map((v) => v.id))
       const iso = new Date().toISOString()

@@ -1,4 +1,4 @@
-import type { Platform, Settings } from '../core/ports'
+import type { Platform, Settings } from '@core/ports'
 import { toMediaUrl, basename, dirOf, stripExt } from '../utils/media'
 
 /**

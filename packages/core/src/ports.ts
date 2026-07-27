@@ -1,4 +1,4 @@
-import type { Clip, ExportProgress } from '../types'
+import type { Clip, ExportProgress } from './types'
 
 /**
  * 平台端口（ports & adapters）。

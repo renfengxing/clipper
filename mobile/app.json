@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "宽宽爸视频切片",
+    "slug": "kuankuan-clipper",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.kuankuan.clipper",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "需要访问相册来打开你要标记的比赛视频",
+        "NSPhotoLibraryAddUsageDescription": "导出的片段会保存回相册",
+        "NSMicrophoneUsageDescription": "用于语音输入片段解说"
+      }
+    },
+    "plugins": ["expo-image-picker", "expo-media-library"]
+  }
+}

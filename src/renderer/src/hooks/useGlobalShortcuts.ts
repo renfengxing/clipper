@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { useStore } from '../store/useStore'
-import { platform } from '../core/ports'
+import { useStore } from '@core/store/useStore'
+import { platform } from '@core/ports'
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false

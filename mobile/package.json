@@ -1,0 +1,32 @@
+{
+  "name": "kuankuan-clipper-mobile",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "prebuild": "expo prebuild --platform ios",
+    "typecheck": "tsc --noEmit",
+    "android": "expo run:android"
+  },
+  "dependencies": {
+    "expo": "~51.0.39",
+    "expo-av": "~14.0.7",
+    "expo-file-system": "~17.0.1",
+    "expo-haptics": "~13.0.1",
+    "expo-image-picker": "~15.0.7",
+    "expo-media-library": "~16.0.5",
+    "expo-status-bar": "~1.12.1",
+    "react": "18.2.0",
+    "react-native": "0.74.5",
+    "react-native-gesture-handler": "~2.16.1",
+    "react-native-safe-area-context": "4.10.5",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "~18.2.79",
+    "babel-plugin-module-resolver": "^5.0.3",
+    "typescript": "~5.3.3"
+  },
+  "private": true
+}

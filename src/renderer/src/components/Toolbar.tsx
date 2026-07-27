@@ -1,4 +1,4 @@
-import { useStore, selectActiveVideo } from '../store/useStore'
+import { useStore, selectActiveVideo } from '@core/store/useStore'
 
 export function Toolbar(): JSX.Element {
   const videos = useStore((s) => s.videos)

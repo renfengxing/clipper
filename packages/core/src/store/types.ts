@@ -1,5 +1,5 @@
 import type { Clip, SourceVideo, ProjectData, Keybindings } from '../types'
-import type { Player } from '../core/ports'
+import type { Player } from '../ports'
 
 export type Direction = 'forward' | 'reverse' | 'paused'
 

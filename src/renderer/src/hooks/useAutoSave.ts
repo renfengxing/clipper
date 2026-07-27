@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { useStore } from '../store/useStore'
-import { platform } from '../core/ports'
-import { APP_NAME } from '../constants'
+import { useStore } from '@core/store/useStore'
+import { platform } from '@core/ports'
+import { APP_NAME } from '@core/constants'
 
 /**
  * 自动保存（#96）：

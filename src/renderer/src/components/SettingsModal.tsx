@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useStore } from '../store/useStore'
-import { DEFAULT_KEYBINDINGS, type Keybindings } from '../types'
-import { keyLabel } from '../utils/keys'
+import { useStore } from '@core/store/useStore'
+import { DEFAULT_KEYBINDINGS, type Keybindings } from '@core/types'
+import { keyLabel } from '@core/utils/keys'
 
 const KB_ROWS: Array<{ key: keyof Keybindings; label: string }> = [
   { key: 'speedUp', label: '快进（2/4/8x）' },

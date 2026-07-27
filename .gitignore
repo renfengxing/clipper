@@ -6,3 +6,7 @@ dist/
 .claude/
 .github/workflows/
 ci-artifacts/
+mobile/node_modules/
+mobile/ios/Pods/
+mobile/ios/build/
+mobile/.expo/

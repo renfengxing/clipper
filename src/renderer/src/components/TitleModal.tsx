@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from '../store/useStore'
-import { fmtPrecise } from '../utils/time'
+import { useStore } from '@core/store/useStore'
+import { fmtPrecise } from '@core/utils/time'
 
 /**
  * 标题输入框（规格 6.1）。打字命名；可顺手打标签（#60/#61）。

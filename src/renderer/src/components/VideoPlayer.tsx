@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useStore, selectActiveVideo } from '../store/useStore'
-import { fmtPrecise, fmtMs } from '../utils/time'
-import { keyLabel } from '../utils/keys'
-import { localToGlobal } from '../utils/timeline'
+import { useStore, selectActiveVideo } from '@core/store/useStore'
+import { fmtPrecise, fmtMs } from '@core/utils/time'
+import { keyLabel } from '@core/utils/keys'
+import { localToGlobal } from '@core/utils/timeline'
 import { basename } from '../utils/media'
 
 interface Props {

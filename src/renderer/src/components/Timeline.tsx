@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { useStore } from '../store/useStore'
-import { fmtClock, fmtPrecise, fmtMs } from '../utils/time'
-import { keyLabel } from '../utils/keys'
-import { ordered, totalDuration, videoOffset, localToGlobal } from '../utils/timeline'
+import { useStore } from '@core/store/useStore'
+import { fmtClock, fmtPrecise, fmtMs } from '@core/utils/time'
+import { keyLabel } from '@core/utils/keys'
+import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/timeline'
 
 const MIN_ZOOM = 1
 const MAX_ZOOM = 32

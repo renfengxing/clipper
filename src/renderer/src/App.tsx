@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from './store/useStore'
+import { useStore } from '@core/store/useStore'
 import { Toolbar } from './components/Toolbar'
 import { VideoPlayer } from './components/VideoPlayer'
 import { Timeline } from './components/Timeline'

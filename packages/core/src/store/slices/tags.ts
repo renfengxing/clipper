@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState, TagsSlice } from '../types'
-import { platform } from '../../core/ports'
+import { platform } from '../../ports'
 
 export const createTagsSlice: StateCreator<AppState, [], [], TagsSlice> = (set, get) => ({
   checkedIds: [],

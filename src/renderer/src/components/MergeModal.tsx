@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useStore } from '../store/useStore'
-import type { ExportProgress } from '../types'
-import { APP_NAME } from '../constants'
+import { useStore } from '@core/store/useStore'
+import type { ExportProgress } from '@core/types'
+import { APP_NAME } from '@core/constants'
 import { dirOf, basename } from '../utils/media'
-import { ordered } from '../utils/timeline'
+import { ordered } from '@core/utils/timeline'
 
 export function MergeModal(): JSX.Element | null {
   const open = useStore((s) => s.mergeOpen)
