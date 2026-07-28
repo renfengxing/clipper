@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { View, Text, StyleSheet, PanResponder, LayoutChangeEvent } from 'react-native'
+import { View, Text, StyleSheet, PanResponder, LayoutChangeEvent, Pressable, Alert } from 'react-native'
 import { useStore } from '@core/store/useStore'
 import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/timeline'
 
@@ -22,6 +22,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const clearPreview = useStore((s) => s.clearPreview)
   const selectClip = useStore((s) => s.selectClip)
   const activeVideoId = useStore((s) => s.activeVideoId)
+  const removeVideo = useStore((s) => s.removeVideo)
 
   const [width, setWidth] = useState(0)
   const widthRef = useRef(0)
@@ -102,18 +103,33 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       {segs.length > 1 && (
         <View style={[s.segRow, { width }]}>
           {segs.map((v, i) => (
-            <View
+            // 点=跳到该视频开头；长按=从时间线移除（片段仍随视频保留）
+            <Pressable
               key={v.id}
               style={[
                 s.seg,
-                { left: pct(videoOffset(videos, v.id)), width: Math.max(18, pct(v.duration)) },
+                { left: pct(videoOffset(videos, v.id)), width: Math.max(22, pct(v.duration)) },
                 v.id === activeVideoId && s.segActive
               ]}
+              onPress={() => {
+                ref.current.clearPreview()
+                ref.current.seek(videoOffset(ref.current.videos, v.id))
+              }}
+              onLongPress={() =>
+                Alert.alert(
+                  `移除视频 ${i + 1}`,
+                  `${v.fileName}\n\n只从这条时间线移除，片段数据仍保留，重新添加即可恢复。`,
+                  [
+                    { text: '取消', style: 'cancel' },
+                    { text: '移除', style: 'destructive', onPress: () => removeVideo(v.id) }
+                  ]
+                )
+              }
             >
               <Text numberOfLines={1} style={s.segText}>
-                {i + 1}
+                {i + 1} ⋯
               </Text>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}
@@ -149,7 +165,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 const s = StyleSheet.create({
   wrap: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 2 },
   wrapFloat: { paddingHorizontal: 12, paddingBottom: 0 },
-  segRow: { height: 14, marginBottom: 3 },
+  segRow: { height: 20, marginBottom: 4 },
   seg: {
     position: 'absolute',
     top: 0,
@@ -160,7 +176,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 3
   },
   segActive: { backgroundColor: '#334155' },
-  segText: { color: '#94a3b8', fontSize: 9 },
+  segText: { color: '#cbd5e1', fontSize: 10 },
   track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6, overflow: 'hidden' },
   trackFloat: { height: 34, backgroundColor: 'rgba(30,41,59,0.6)' },
   divider: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#475569' },

@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { View, Text, Pressable, TextInput, ScrollView, StyleSheet } from 'react-native'
+import {
+  View,
+  Text,
+  Pressable,
+  TextInput,
+  ScrollView,
+  StyleSheet,
+  KeyboardAvoidingView,
+  useWindowDimensions
+} from 'react-native'
 import { useStore } from '@core/store/useStore'
 import { fmtPrecise } from '@core/utils/time'
 
@@ -18,15 +27,16 @@ export function TitleSheet(): JSX.Element | null {
   const videoTags = useStore((s) => s.videoTags)
   const defaultTags = useStore((s) => s.defaultTags)
 
+  const { width, height } = useWindowDimensions()
+  const landscape = width > height
+
   const [tags, setTags] = useState<string[]>([])
   const [text, setText] = useState('')
-  const [typing, setTyping] = useState(false)
 
   useEffect(() => {
     if (open) {
       setTags([])
       setText('')
-      setTyping(false)
     }
   }, [open])
 
@@ -56,14 +66,14 @@ export function TitleSheet(): JSX.Element | null {
   )
 
   return (
-    <View style={s.backdrop}>
+    <KeyboardAvoidingView style={s.backdrop} behavior="padding">
       <View style={s.sheet}>
         <View style={s.handle} />
         <Text style={s.range}>
           {fmtPrecise(lo)} → {fmtPrecise(hi)}　<Text style={s.dur}>{(hi - lo).toFixed(1)}s</Text>
         </Text>
 
-        <ScrollView style={{ maxHeight: 260 }}>
+        <ScrollView style={{ maxHeight: landscape ? 92 : 240 }} keyboardShouldPersistTaps="handled">
           {names.length > 0 && (
             <>
               <Text style={s.label}>谁 / 自定义</Text>
@@ -78,26 +88,17 @@ export function TitleSheet(): JSX.Element | null {
           )}
         </ScrollView>
 
-        <View style={s.preview}>
-          <Text style={title ? s.previewText : s.previewEmpty}>
-            {title || '点标签自动生成标题，或打字写解说'}
-          </Text>
-        </View>
-
-        {typing ? (
-          <TextInput
-            autoFocus
-            value={text}
-            onChangeText={setText}
-            multiline
-            placeholder="片段解说 / 评价"
-            placeholderTextColor="#64748b"
-            style={s.input}
-          />
-        ) : (
-          <Pressable style={s.typeBtn} onPress={() => setTyping(true)}>
-            <Text style={s.typeBtnText}>⌨️ 打字写解说</Text>
-          </Pressable>
+        {/* 输入框常驻：不用先点按钮（#3）。留空则用上面点选的标签自动拼标题 */}
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          multiline
+          placeholder={tags.length ? `留空则用：${tags.join(' ')}` : '点标签自动生成标题，或在此打字写解说'}
+          placeholderTextColor="#64748b"
+          style={[s.input, landscape && s.inputLand]}
+        />
+        {tags.length > 0 && !text.trim() && (
+          <Text style={s.previewHint}>标题将是：{tags.join(' ')}</Text>
         )}
 
         <View style={s.actions}>
@@ -113,7 +114,7 @@ export function TitleSheet(): JSX.Element | null {
           </Pressable>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -129,22 +130,19 @@ const s = StyleSheet.create({
   chipOn: { backgroundColor: '#0891b2' },
   chipText: { color: '#cbd5e1', fontSize: 14 },
   chipTextOn: { color: '#fff' },
-  preview: { backgroundColor: '#0f172a', borderRadius: 8, padding: 10, marginTop: 6, marginBottom: 10 },
-  previewText: { color: '#e2e8f0', fontSize: 15 },
-  previewEmpty: { color: '#475569', fontSize: 13 },
+  previewHint: { color: '#22d3ee', fontSize: 12, marginTop: 6 },
   input: {
     backgroundColor: '#0f172a',
     borderRadius: 8,
     padding: 10,
     color: '#e2e8f0',
     fontSize: 15,
-    minHeight: 70,
-    marginBottom: 10,
+    minHeight: 64,
+    marginTop: 8,
     textAlignVertical: 'top'
   },
-  typeBtn: { backgroundColor: '#334155', borderRadius: 8, paddingVertical: 11, alignItems: 'center', marginBottom: 10 },
-  typeBtnText: { color: '#e2e8f0', fontSize: 14 },
-  actions: { flexDirection: 'row', gap: 8 },
+  inputLand: { minHeight: 40, fontSize: 14 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 10 },
   cancel: { flex: 1, borderWidth: 1, borderColor: '#475569', borderRadius: 8, paddingVertical: 13, alignItems: 'center' },
   cancelText: { color: '#94a3b8', fontSize: 15 },
   save: { flex: 2, backgroundColor: '#0891b2', borderRadius: 8, paddingVertical: 13, alignItems: 'center' },
