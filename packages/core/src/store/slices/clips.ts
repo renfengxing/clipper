@@ -100,17 +100,22 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     const globalOut = localToGlobal(videos, clip.videoId, clip.out)
     get().pause()
     set({ selectedClipId: id })
+    const beforeActive = get().activeVideoId
     get().seek(globalIn)
     // previewStart 非空 → 到 out 自动回到 in 循环（#102）
-    set({ previewStart: globalIn, previewEnd: globalOut, playing: true, direction: 'forward', rate: 1 })
-    const p = get().player
-    if (p) {
-      p.setRate(1)
-      p.play()
+    set({ previewStart: globalIn, previewEnd: globalOut, previewEntered: false, playing: true, direction: 'forward', rate: 1 })
+    // 跨视频时 seek 只是记下 pendingSeekLocal 并切 activeVideoId，此刻 player 还是旧视频的：
+    // 对它 play() 会让「上一个视频」从原位置播起来。交给新视频加载后的 applyPendingSeek 去 seek+play。
+    if (get().activeVideoId === beforeActive) {
+      const p = get().player
+      if (p) {
+        p.setRate(1)
+        p.play()
+      }
     }
   },
 
-  deselectClip: () => set({ selectedClipId: null, previewStart: null, previewEnd: null }),
+  deselectClip: () => set({ selectedClipId: null, previewStart: null, previewEnd: null, previewEntered: false }),
 
   updateClipTitle: (id, title) =>
     set((s) => {

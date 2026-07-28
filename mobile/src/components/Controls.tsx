@@ -50,9 +50,15 @@ export function Controls({ floating, onPickVideos }: Props): JSX.Element {
 
 const s = StyleSheet.create({
   row: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
-  rowFloat: { paddingVertical: 6 },
+  rowFloat: { paddingVertical: 6, gap: 5, paddingRight: 150 }, // 右侧留给浮动的标记按钮
   btn: { backgroundColor: '#334155', borderRadius: 7, paddingVertical: 9, paddingHorizontal: 11 },
-  btnFloat: { backgroundColor: 'rgba(30,41,59,0.55)', borderWidth: 0.5, borderColor: 'rgba(148,163,184,0.25)' },
+  btnFloat: {
+    backgroundColor: 'rgba(30,41,59,0.55)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(148,163,184,0.25)',
+    paddingHorizontal: 9,
+    paddingVertical: 8
+  },
   btnPlay: { paddingHorizontal: 15 },
   txt: { color: '#e2e8f0', fontSize: 13 },
   txtFloat: { color: 'rgba(255,255,255,0.85)' }

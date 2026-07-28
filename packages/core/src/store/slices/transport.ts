@@ -71,6 +71,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     direction: 'paused',
     previewStart: null,
     previewEnd: null,
+    previewEntered: false,
     pendingSeekLocal: null,
 
     setPlayer: (p) => set({ player: p }),
@@ -89,18 +90,31 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     },
 
     syncLocalTime: (local) => {
-      const { videos, activeVideoId, previewEnd, previewStart } = get()
+      const { videos, activeVideoId, previewEnd, previewStart, previewEntered } = get()
       if (!activeVideoId) return
       const T = videoOffset(videos, activeVideoId) + local
-      if (previewEnd != null && T >= previewEnd) {
-        // 选中片段循环播放：回到起点继续（#102）
-        if (previewStart != null) {
-          get().seek(previewStart)
+
+      if (previewEnd != null) {
+        const start = previewStart ?? 0
+        // 刚 seek 到片段起点时，播放器状态流里还会残留 seek 之前的旧位置。
+        // 若不等「确实进入过片段区间」就判断 T>=previewEnd，会被旧位置立刻误触发，
+        // 于是不停把播放头拽回起点 —— 表现为「点片段不播/不从起点播」。
+        if (!previewEntered) {
+          if (T >= start && T < previewEnd) set({ previewEntered: true })
+          set({ currentTime: T })
           return
         }
-        set({ currentTime: previewEnd })
-        get().pause()
-        return
+        if (T >= previewEnd) {
+          if (previewStart != null) {
+            // 循环：回到起点，重新等待「进入」
+            set({ previewEntered: false })
+            get().seek(previewStart)
+            return
+          }
+          set({ currentTime: previewEnd })
+          get().pause()
+          return
+        }
       }
       set({ currentTime: T })
     },
@@ -132,7 +146,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
       }
     },
 
-    clearPreview: () => set({ previewStart: null, previewEnd: null }),
+    clearPreview: () => set({ previewStart: null, previewEnd: null, previewEntered: false }),
 
     play: () => {
       const { videos } = get()
@@ -153,7 +167,7 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     pause: () => {
       stopReverse()
       get().player?.pause()
-      set({ playing: false, previewStart: null, previewEnd: null })
+      set({ playing: false, previewStart: null, previewEnd: null, previewEntered: false })
     },
 
     resume: () => {

@@ -20,13 +20,16 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const selectedClipId = useStore((s) => s.selectedClipId)
   const seek = useStore((s) => s.seek)
   const clearPreview = useStore((s) => s.clearPreview)
+  const selectClip = useStore((s) => s.selectClip)
   const activeVideoId = useStore((s) => s.activeVideoId)
 
   const [width, setWidth] = useState(0)
   const widthRef = useRef(0)
   const total = totalDuration(videos)
-  const totalRef = useRef(0)
-  totalRef.current = total
+
+  // PanResponder 只创建一次，用 ref 读取每次渲染的最新值
+  const ref = useRef({ total, clips, videos, seek, clearPreview, selectClip })
+  ref.current = { total, clips, videos, seek, clearPreview, selectClip }
 
   const onLayout = (e: LayoutChangeEvent): void => {
     const w = e.nativeEvent.layout.width
@@ -34,22 +37,57 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     setWidth(w)
   }
 
-  const seekAtX = (x: number): void => {
+  const timeAtX = (x: number): number | null => {
     const w = widthRef.current
-    const t = totalRef.current
-    if (w <= 0 || t <= 0) return
-    seek(Math.max(0, Math.min(t, (x / w) * t)))
+    const t = ref.current.total
+    if (w <= 0 || t <= 0) return null
+    return Math.max(0, Math.min(t, (x / w) * t))
   }
+
+  /** 该全局时间落在哪个片段上（用于区分「点片段」和「拖轨道」） */
+  const clipAt = (t: number): string | null => {
+    const { clips: cs, videos: vs } = ref.current
+    const hit = cs.find((c) => {
+      const gin = localToGlobal(vs, c.videoId, c.in)
+      const gout = localToGlobal(vs, c.videoId, c.out)
+      return t >= gin && t <= gout
+    })
+    return hit?.id ?? null
+  }
+
+  const movedRef = useRef(false)
+  const hitClipRef = useRef<string | null>(null)
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (e) => {
-        clearPreview() // 手动 scrub → 停止片段循环，可跨视频
-        seekAtX(e.nativeEvent.locationX)
+        const t = timeAtX(e.nativeEvent.locationX)
+        movedRef.current = false
+        hitClipRef.current = t == null ? null : clipAt(t)
+        // 按在片段上：先不动，等松手判定为「点击片段」；按在空白处：立刻 scrub
+        if (hitClipRef.current == null && t != null) {
+          ref.current.clearPreview()
+          ref.current.seek(t)
+        }
       },
-      onPanResponderMove: (e) => seekAtX(e.nativeEvent.locationX)
+      onPanResponderMove: (e) => {
+        movedRef.current = true
+        hitClipRef.current = null // 变成拖拽，不再算点击片段
+        const t = timeAtX(e.nativeEvent.locationX)
+        if (t != null) {
+          ref.current.clearPreview()
+          ref.current.seek(t)
+        }
+      },
+      onPanResponderRelease: () => {
+        // 点在片段上且没拖动 → 从片段起点循环播放（与列表点击一致）
+        if (!movedRef.current && hitClipRef.current) {
+          ref.current.selectClip(hitClipRef.current)
+        }
+        hitClipRef.current = null
+      }
     })
   ).current
 

@@ -26,6 +26,7 @@ export interface TransportSlice {
   rate: number
   direction: Direction
   previewStart: number | null // 预览/循环起点（全局）
+  previewEntered: boolean // 是否已真正进入片段区间（防陈旧状态误触发循环）
   previewEnd: number | null // 预览/循环终点（全局）
   pendingSeekLocal: number | null // 切 src 后待应用的局部 seek
   setPlayer: (p: Player | null) => void

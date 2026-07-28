@@ -58,26 +58,53 @@ export default function App(): JSX.Element {
     if (!ready) return
     let seekTimer: ReturnType<typeof setTimeout> | null = null
     let pendingSec: number | null = null
-    const flushSeek = (): void => {
-      seekTimer = null
+    // 所有指令串成一条链：并发的 setStatusAsync 会互相打断（"Seeking interrupted"）
+    let chain: Promise<unknown> = Promise.resolve()
+
+    const push = (status: Record<string, unknown>): void => {
+      chain = chain
+        .catch(() => {})
+        .then(() => videoRef.current?.setStatusAsync(status))
+        .catch(() => {}) // 拖拽时被后一次指令打断属正常
+    }
+
+    /** 取出待定 seek（并取消定时器），供与播放指令合并成一次原子调用 */
+    const takePending = (): number | null => {
+      if (seekTimer) {
+        clearTimeout(seekTimer)
+        seekTimer = null
+      }
       const sec = pendingSec
       pendingSec = null
-      if (sec == null) return
-      videoRef.current?.setPositionAsync(sec * 1000).catch(() => {})
+      return sec
     }
+
     setPlayer({
       seekLocal: (sec) => {
+        // 拖拽期间高频调用 → 节流合并
         pendingSec = sec
-        if (seekTimer == null) seekTimer = setTimeout(flushSeek, 40)
+        if (seekTimer == null) {
+          seekTimer = setTimeout(() => {
+            seekTimer = null
+            const s = pendingSec
+            pendingSec = null
+            if (s != null) push({ positionMillis: Math.round(s * 1000) })
+          }, 40)
+        }
       },
+      // 关键：定位与播放合并成一次 setStatusAsync，杜绝「先播后定位」的竞态
       play: () => {
-        videoRef.current?.playAsync().catch(() => {})
+        const s = takePending()
+        push(s != null ? { positionMillis: Math.round(s * 1000), shouldPlay: true } : { shouldPlay: true })
       },
       pause: () => {
-        videoRef.current?.pauseAsync().catch(() => {})
+        takePending()
+        push({ shouldPlay: false })
       },
       setRate: (r) => {
-        videoRef.current?.setRateAsync(r, true).catch(() => {})
+        const s = takePending()
+        const base = { rate: r, shouldCorrectPitch: true }
+        push(s != null ? { ...base, positionMillis: Math.round(s * 1000) } : base)
       }
     })
     applyPendingSeek()
@@ -164,37 +191,36 @@ export default function App(): JSX.Element {
             {videoEl}
             {markingOverlay}
 
-            <View style={s.landTopBar} pointerEvents="none">
-              <View style={s.pill}>{statusText}</View>
-              <View style={s.pill}>
-                <Text style={s.meta}>
-                  {videos.length} 视频 · {clips.length} 片段
-                </Text>
+            <View style={s.landTopBar} pointerEvents="box-none">
+              <View style={s.pill} pointerEvents="none">
+                {statusText}
               </View>
+              {/* 片段列表开关：做成浮动按钮，比屏幕边缘的细条好找得多 */}
+              <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
+                <Text style={s.listToggleText}>
+                  {listOpen ? '片段 ▶' : `☰ 片段 ${clips.length}`}
+                </Text>
+              </Pressable>
             </View>
+
+            {/* 标记按钮：独立浮在右侧，避免被控制条挤掉；两手握持时右拇指可及 */}
+            <View style={s.landMark}>{markButton()}</View>
 
             <View style={s.landBottom}>
               <Timeline floating />
-              <View style={s.landBottomRow}>
-                <Controls floating onPickVideos={() => void chooseAndAddVideos()} />
-                {markButton()}
-              </View>
+              <Controls floating onPickVideos={() => void chooseAndAddVideos()} />
             </View>
           </View>
 
           {listOpen ? (
             <View style={s.landList}>
               <Pressable style={s.collapseBar} onPress={() => setListOpen(false)}>
-                <Text style={s.collapseText}>▶ 收起</Text>
+                <Text style={s.collapseText}>片段 {clips.length}</Text>
+                <Text style={s.collapseAction}>收起 ▶</Text>
               </Pressable>
               <ClipList />
             </View>
-          ) : (
-            <Pressable style={s.expandTab} onPress={() => setListOpen(true)}>
-              <Text style={s.collapseText}>◀</Text>
-              <Text style={s.expandCount}>{clips.length}</Text>
-            </Pressable>
-          )}
+          ) : null}
         </View>
         <TitleSheet />
       </SafeAreaView>
@@ -246,23 +272,29 @@ const s = StyleSheet.create({
     paddingVertical: 4
   },
   landBottom: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  landBottomRow: { flexDirection: 'row', alignItems: 'center', paddingRight: 12, paddingBottom: 6 },
+  // 标记按钮浮在视频区右侧、时间线之上
+  landMark: { position: 'absolute', right: 10, bottom: 96 },
   landList: { width: 300, backgroundColor: '#0f172a', borderLeftWidth: 0.5, borderLeftColor: '#1e293b' },
   collapseBar: {
-    paddingVertical: 9,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 0.5,
     borderBottomColor: '#1e293b'
   },
-  collapseText: { color: '#94a3b8', fontSize: 12 },
-  expandTab: {
-    width: 34,
-    backgroundColor: '#1e293b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6
+  collapseText: { color: '#e2e8f0', fontSize: 13 },
+  collapseAction: { color: '#22d3ee', fontSize: 12 },
+  listToggle: {
+    backgroundColor: 'rgba(8,145,178,0.75)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 0.5,
+    borderColor: 'rgba(34,211,238,0.6)'
   },
-  expandCount: { color: '#22d3ee', fontSize: 12 },
+  listToggleText: { color: '#fff', fontSize: 13, fontWeight: '500' },
 
   // 竖屏
   portVideo: { height: 210, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
