@@ -19,7 +19,7 @@ type Dir = 'fwd' | 'rev'
 interface Pick {
   dir: Dir
   idx: number // -1 = 还没选中任何档
-  x: number // 手指当前位置（相对 stage），倍率条据此贴在手指旁边
+  x: number // 按下时的落点（相对 stage）：倍率条锚定在这里，不跟手漂
   y: number
 }
 
@@ -106,7 +106,7 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
         }, HOLD_MS)
       },
-      onPanResponderMove: (e, g) => {
+      onPanResponderMove: (_e, g) => {
         if (!cbRef.current.enabled) return
         if (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4) movedRef.current = true
         if (!holdRef.current) {
@@ -124,11 +124,11 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
             ? -1
             : Math.max(0, Math.min(list.length - 1, Math.round((dist - DEAD_PX) / STEP_PX)))
         const cur = pickRef.current
-        const x = e.nativeEvent.locationX
-        const y = e.nativeEvent.locationY
-        if (!cur || cur.dir !== dir || cur.idx !== idx || cur.x !== x || cur.y !== y) {
-          setPickBoth({ dir, idx, x, y })
-          if (cur && cur.idx !== idx && idx >= 0) void Haptics.selectionAsync()
+        if (!cur) return
+        // 位置锚定在按下的落点，不跟着手指漂：滑动只改变贴哪一侧和高亮档位
+        if (cur.dir !== dir || cur.idx !== idx) {
+          setPickBoth({ ...cur, dir, idx })
+          if (cur.idx !== idx && idx >= 0) void Haptics.selectionAsync()
         }
       },
       onPanResponderRelease: (_e, g) => {
@@ -161,7 +161,8 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   const rateList = pick?.dir === 'rev' ? REV : FWD
   const label = (v: number): string => (v < 0 ? `◀${-v}x` : `${v}x`)
 
-  // 倍率条贴在手指的左/右侧（不是屏幕的左右侧），再夹进画面内避免出界
+  // 倍率条锚定在「按下的落点」旁边（不是屏幕边、也不跟手漂）：
+  // 右滑贴落点右侧、左滑贴左侧，只在换方向时整体挪一次，再夹进画面内避免出界
   const PAD = 10
   const GAP_PX = 18
   const rawLeft = pick
