@@ -171,6 +171,11 @@ export function ClipList({
                 )}
               </View>
               {c.id === selectedClipId && <Text style={s.loop}>循环中</Text>}
+              {onEditClip && (
+                <Pressable onPress={() => onEditClip(c.id)} hitSlop={10} style={s.editBtn}>
+                  <Text style={s.editText}>✎</Text>
+                </Pressable>
+              )}
             </Pressable>
           ))
         )}
@@ -180,6 +185,8 @@ export function ClipList({
 }
 
 const s = StyleSheet.create({
+  editBtn: { paddingHorizontal: 6, paddingVertical: 4 },
+  editText: { color: '#64748b', fontSize: 16 },
   pickRow: {
     flexDirection: 'row',
     alignItems: 'center',

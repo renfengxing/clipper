@@ -6,7 +6,7 @@ import { localToGlobal } from '@core/utils/timeline'
  * 播放时在画面下方显示当前命中片段的标题（与 PC 版 #75/#84 一致）。
  * 导出时烧进画面的也是同一份文字，这里让屏幕上先看到效果。
  */
-export function Subtitle(): JSX.Element | null {
+export function Subtitle({ bottom = 84 }: { bottom?: number } = {}): JSX.Element | null {
   const on = useStore((s) => s.subtitleOn)
   const clips = useStore((s) => s.clips)
   const videos = useStore((s) => s.videos)
@@ -22,7 +22,7 @@ export function Subtitle(): JSX.Element | null {
   if (hits.length === 0) return null
 
   return (
-    <View style={s.wrap} pointerEvents="none">
+    <View style={[s.wrap, { bottom }]} pointerEvents="none">
       {hits.map((c) => (
         <Text key={c.id} style={s.text} numberOfLines={2}>
           {c.title}
@@ -33,10 +33,10 @@ export function Subtitle(): JSX.Element | null {
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', left: 16, right: 16, bottom: 84, alignItems: 'center', gap: 3 },
+  wrap: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 3 },
   text: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
     textAlign: 'center',
     // 描边靠阴影模拟，保证亮底画面上也看得清

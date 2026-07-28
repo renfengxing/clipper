@@ -327,7 +327,7 @@ export default function App(): JSX.Element {
           <View style={s.landRow}>
             <VideoStage onFlick={onFlick} enabled={!!active} bottomInset={LAND_BOTTOM_ZONE}>
               {videoEl}
-              <Subtitle />
+              <Subtitle bottom={84} />
               {markingOverlay}
               {playErrorOverlay}
 
@@ -392,7 +392,7 @@ export default function App(): JSX.Element {
         <View style={s.portVideo}>
           <VideoStage onFlick={onFlick} enabled={!!active}>
             {videoEl}
-            <Subtitle />
+            <Subtitle bottom={8} />
             {markingOverlay}
             {playErrorOverlay}
           </VideoStage>

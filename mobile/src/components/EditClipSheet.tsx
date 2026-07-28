@@ -10,7 +10,8 @@ import {
   KeyboardAvoidingView
 } from 'react-native'
 import { useStore } from '@core/store/useStore'
-import { fmtClock } from '@core/utils/time'
+import { fmtMs } from '@core/utils/time'
+import { videoOffset } from '@core/utils/timeline'
 
 interface Props {
   clipId: string | null
@@ -25,6 +26,10 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
   const addTag = useStore((s) => s.addTag)
   const removeTag = useStore((s) => s.removeTag)
   const addVideoTag = useStore((s) => s.addVideoTag)
+  const updateClipTimes = useStore((s) => s.updateClipTimes)
+  const videos = useStore((s) => s.videos)
+  const currentTime = useStore((s) => s.currentTime)
+  const seek = useStore((s) => s.seek)
 
   const clip = clips.find((c) => c.id === clipId) || null
   const [title, setTitle] = useState('')
@@ -39,6 +44,38 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
   }, [clipId])
 
   if (!clip) return <></>
+
+  // 片段存的是「视频内的局部时间」，播放头是跨视频的全局时间，来回换算要减掉偏移
+  const offset = videoOffset(videos, clip.videoId)
+  const nudge = (which: 'in' | 'out', by: number): void => {
+    const nextIn = which === 'in' ? clip.in + by : clip.in
+    const nextOut = which === 'out' ? clip.out + by : clip.out
+    // 至少留 0.1s，否则片段会翻转成负长度
+    if (nextOut - nextIn < 0.1) return
+    updateClipTimes(clip.id, Math.max(0, nextIn), Math.max(0.1, nextOut))
+    seek(offset + (which === 'in' ? Math.max(0, nextIn) : Math.max(0.1, nextOut)))
+  }
+  const takeCurrent = (which: 'in' | 'out'): void => {
+    const local = Math.max(0, currentTime - offset)
+    if (which === 'in' && clip.out - local < 0.1) return
+    if (which === 'out' && local - clip.in < 0.1) return
+    updateClipTimes(clip.id, which === 'in' ? local : clip.in, which === 'out' ? local : clip.out)
+  }
+
+  const timeRow = (which: 'in' | 'out'): JSX.Element => (
+    <View style={s.timeRow}>
+      <Text style={s.timeLabel}>{which === 'in' ? '起点' : '终点'}</Text>
+      <Text style={s.timeValue}>{fmtMs(which === 'in' ? clip.in : clip.out)}</Text>
+      {[-1, -0.1, 0.1, 1].map((d) => (
+        <Pressable key={d} style={s.nudge} onPress={() => nudge(which, d)}>
+          <Text style={s.nudgeText}>{d > 0 ? `+${d}` : d}</Text>
+        </Pressable>
+      ))}
+      <Pressable style={s.takeBtn} onPress={() => takeCurrent(which)}>
+        <Text style={s.takeText}>取当前</Text>
+      </Pressable>
+    </View>
+  )
 
   const tags = clip.tags || []
   // 已用过的词 + 该视频的词表，去重后一起给出来
@@ -76,9 +113,7 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
             <Pressable onPress={onClose} hitSlop={12}>
               <Text style={s.cancel}>取消</Text>
             </Pressable>
-            <Text style={s.time}>
-              {fmtClock(clip.in)} - {fmtClock(clip.out)} · {(clip.out - clip.in).toFixed(1)}s
-            </Text>
+            <Text style={s.time}>时长 {(clip.out - clip.in).toFixed(1)}s</Text>
             <Pressable onPress={save} hitSlop={12}>
               <Text style={s.done}>保存</Text>
             </Pressable>
@@ -93,8 +128,14 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
               placeholder="比如：宽宽右路突破后传中"
               placeholderTextColor="#475569"
               multiline
-              autoFocus
             />
+
+            <Text style={[s.label, s.gap]}>起止时间</Text>
+            {timeRow('in')}
+            {timeRow('out')}
+            <Text style={s.hint}>
+              「取当前」= 把播放头现在的位置设为该端点；点 ± 会同时把画面跳过去，方便对准
+            </Text>
 
             <Text style={[s.label, s.gap]}>标签</Text>
             <View style={s.chips}>
@@ -162,6 +203,32 @@ const s = StyleSheet.create({
     fontSize: 15,
     minHeight: 46
   },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
+  timeLabel: { color: '#94a3b8', fontSize: 13, width: 30 },
+  timeValue: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    width: 68,
+    fontVariant: ['tabular-nums']
+  },
+  nudge: {
+    backgroundColor: '#1e293b',
+    borderRadius: 7,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    minWidth: 36,
+    alignItems: 'center'
+  },
+  nudgeText: { color: '#cbd5e1', fontSize: 12 },
+  takeBtn: {
+    borderRadius: 7,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderWidth: 0.5,
+    borderColor: 'rgba(34,211,238,0.55)'
+  },
+  takeText: { color: '#22d3ee', fontSize: 12 },
+  hint: { color: '#64748b', fontSize: 11, lineHeight: 17, marginTop: 2 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   chip: {
     borderRadius: 15,
