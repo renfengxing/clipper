@@ -66,7 +66,8 @@ export interface ClipsSlice {
   selectClip: (id: string) => void
   deselectClip: () => void
   updateClipTitle: (id: string, title: string) => void
-  updateClipTimes: (id: string, inSec: number, outSec: number) => void // 局部 in/out
+  updateClipTimes: (id: string, inSec: number, outSec: number) => void // 局部 in/out（不跨视频时用）
+  updateClipRange: (id: string, globalIn: number, globalOut: number) => void // 全局时间，可跨视频
   deleteClip: (id: string) => void
 }
 

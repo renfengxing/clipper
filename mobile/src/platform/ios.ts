@@ -241,7 +241,12 @@ ${lines}`
       sourcePath: c.videoRef,
       start: c.in,
       end: c.out,
-      title: c.title || `片段${i + 1}`
+      title: c.title || `片段${i + 1}`,
+      segments: (c.segments || []).map((g) => ({
+        sourcePath: g.videoRef,
+        start: g.in,
+        end: g.out
+      }))
     }))
     const todo = opts.skipExisting ? wanted.filter((c) => !exports[c.id]) : wanted
     const skipped = wanted.length - todo.length
@@ -276,7 +281,12 @@ ${lines}`
           sourcePath: c.videoRef,
           start: c.in,
           end: c.out,
-          title: c.title || ''
+          title: c.title || '',
+          segments: (c.segments || []).map((g) => ({
+            sourcePath: g.videoRef,
+            start: g.in,
+            end: g.out
+          }))
         }))
       })
       return { ok: true, outPath: `相册 · ${ALBUM_NAME}` }

@@ -13,9 +13,15 @@ export interface SourceVideo {
 /** 一个标记片段 —— in/out 是相对所属视频的局部时间 */
 export interface Clip {
   id: string
-  videoId: string // 所属源视频（P0-P7）
-  in: number // 入点（秒，局部）
-  out: number // 出点（秒，局部）
+  videoId: string // 起点所在的源视频
+  /**
+   * 终点所在的源视频。缺省 = 与 videoId 相同（不跨视频）。
+   * 跨视频的片段在时间线上是连续的一段，落盘时按视频拆成几截、
+   * 各存进自己的 sidecar，靠 clip id 重新拼回来。
+   */
+  endVideoId?: string
+  in: number // 入点（秒，videoId 内的局部时间）
+  out: number // 出点（秒，endVideoId 内的局部时间）
   title: string
   order: number
   created_at: string

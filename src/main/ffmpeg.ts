@@ -6,7 +6,9 @@ import ffmpegStatic from 'ffmpeg-static'
 import type { Settings } from './settings'
 
 export interface ExportClip {
-  sourcePath: string // 每个片段按自己所属视频的源文件切（多视频）
+  sourcePath: string // 首段来源；跨视频片段的完整分段见 segments
+  /** 跨视频片段的分段（含首段）。缺省或长度 1 = 单视频 */
+  segments?: Array<{ sourcePath: string; in: number; out: number }>
   in: number
   out: number
   title: string
@@ -165,8 +167,36 @@ export async function exportClips(
 
     onProgress({ index: i + 1, total, name: name + '.mp4', status: 'running' })
     try {
-      if (wmAss) await runOneWithAss(ffmpeg, clip.sourcePath, outPath, clip.in, clip.out - clip.in, wmAss)
-      else await runOne(ffmpeg, clip.sourcePath, outPath, clip.in, clip.out - clip.in)
+      const segs =
+        clip.segments && clip.segments.length > 1
+          ? clip.segments
+          : [{ sourcePath: clip.sourcePath, in: clip.in, out: clip.out }]
+      if (segs.length === 1) {
+        if (wmAss) await runOneWithAss(ffmpeg, segs[0].sourcePath, outPath, segs[0].in, segs[0].out - segs[0].in, wmAss)
+        else await runOne(ffmpeg, segs[0].sourcePath, outPath, segs[0].in, segs[0].out - segs[0].in)
+      } else {
+        // 跨视频片段：各段先 -c copy 截到临时目录，再 concat 成一条连续视频
+        const partDir = mkdtempSync(join(tmpdir(), 'fcspan-'))
+        try {
+          const parts: string[] = []
+          for (let k = 0; k < segs.length; k++) {
+            const part = join(partDir, `p${String(k).padStart(3, '0')}.mp4`)
+            await runOne(ffmpeg, segs[k].sourcePath, part, segs[k].in, segs[k].out - segs[k].in)
+            parts.push(part)
+          }
+          const listPath = join(partDir, 'list.txt')
+          writeFileSync(listPath, parts.map((p2) => `file '${p2.replace(/'/g, "'\\''")}'`).join('\n'), 'utf-8')
+          const joined = wmAss ? join(partDir, 'joined.mp4') : outPath
+          await runConcat(ffmpeg, listPath, joined)
+          if (wmAss) {
+            // 水印那一遍要盖住整条，时长取各段之和
+            const spanDur = segs.reduce((n, g) => n + (g.out - g.in), 0)
+            await runOneWithAss(ffmpeg, joined, outPath, 0, spanDur, wmAss)
+          }
+        } finally {
+          rmSync(partDir, { recursive: true, force: true })
+        }
+      }
       exported++
       exports[key] = name + '.mp4'
       onProgress({ index: i + 1, total, name: name + '.mp4', status: 'done' })

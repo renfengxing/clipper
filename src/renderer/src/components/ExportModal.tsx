@@ -3,7 +3,7 @@ import { useStore } from '@core/store/useStore'
 import type { ExportProgress } from '@core/types'
 import { APP_NAME } from '@core/constants'
 import { dirOf } from '../utils/media'
-import { ordered } from '@core/utils/timeline'
+import { ordered, clipSegments } from '@core/utils/timeline'
 
 export function ExportModal(): JSX.Element | null {
   const open = useStore((s) => s.exportOpen)
@@ -79,7 +79,20 @@ export function ExportModal(): JSX.Element | null {
       clips: toExport
         .map((c) => {
           const v = videoById(c.videoId)
-          return v ? { sourcePath: v.path, in: c.in, out: c.out, title: c.title, tags: c.tags } : null
+          if (!v) return null
+          // 跨视频片段拆成分段，导出层会把它们接成一条连续视频
+          const segs = clipSegments(videos, c).map((g) => ({
+            videoRef: g.video.path,
+            in: g.in,
+            out: g.out
+          }))
+          return {
+            sourcePath: segs[0]?.videoRef || v.path,
+            in: segs[0]?.in ?? c.in,
+            out: segs[segs.length - 1]?.out ?? c.out,
+            title: c.title, tags: c.tags,
+            segments: segs
+          }
         })
         .filter((x): x is NonNullable<typeof x> => x !== null)
     })

@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '@core/store/useStore'
 import { fmtClock, fmtPrecise, fmtMs } from '@core/utils/time'
 import { keyLabel } from '@core/utils/keys'
-import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/timeline'
+import { ordered, totalDuration, videoOffset, localToGlobal, clipGlobalIn, clipGlobalOut, isSpanning } from '@core/utils/timeline'
 
 const MIN_ZOOM = 1
 const MAX_ZOOM = 32
@@ -23,7 +23,7 @@ export function Timeline(): JSX.Element {
   const markIn = useStore((s) => s.markIn)
   const markOut = useStore((s) => s.markOut)
   const selectedClipId = useStore((s) => s.selectedClipId)
-  const updateClipTimes = useStore((s) => s.updateClipTimes)
+  const updateClipRange = useStore((s) => s.updateClipRange)
   const selectClip = useStore((s) => s.selectClip)
   const reorderVideos = useStore((s) => s.reorderVideos)
   const removeVideo = useStore((s) => s.removeVideo)
@@ -111,21 +111,24 @@ export function Timeline(): JSX.Element {
   const onEditMove = (e: React.PointerEvent): void => {
     const d = editRef.current
     if (!d) return
-    const localT = clamp(timeFromClientX(e.clientX) - d.offset, 0, d.vdur)
-    let nin = d.origIn
-    let nout = d.origOut
-    if (d.mode === 'in') nin = clamp(localT, 0, d.origOut - MIN_LEN)
-    else if (d.mode === 'out') nout = clamp(localT, d.origIn + MIN_LEN, d.vdur)
+    // 全局时间上算：片段可以跨视频，局部时间会换参照系
+    const gT = timeFromClientX(e.clientX)
+    const gIn0 = d.offset + d.origIn
+    const gOut0 = d.offset + d.origOut
+    let gin = gIn0
+    let gout = gOut0
+    if (d.mode === 'in') gin = clamp(gT, 0, gOut0 - MIN_LEN)
+    else if (d.mode === 'out') gout = clamp(gT, gIn0 + MIN_LEN, total)
     else {
-      const len = d.origOut - d.origIn
-      const delta = timeFromClientX(e.clientX) - d.startG
-      nin = clamp(d.origIn + delta, 0, d.vdur - len)
-      nout = nin + len
+      const len = gOut0 - gIn0
+      const delta = gT - d.startG
+      gin = clamp(gIn0 + delta, 0, total - len)
+      gout = gin + len
     }
-    updateClipTimes(d.id, nin, nout)
-    const edgeLocal = d.mode === 'out' ? nout : nin
-    seek(d.offset + edgeLocal)
-    setBubble({ leftPct: ((d.offset + edgeLocal) / total) * 100, text: fmtPrecise(edgeLocal) })
+    updateClipRange(d.id, gin, gout)
+    const edgeG = d.mode === 'out' ? gout : gin
+    seek(edgeG)
+    setBubble({ leftPct: (edgeG / total) * 100, text: fmtPrecise(edgeG) })
   }
   const onEditUp = (e: React.PointerEvent): void => {
     if (editRef.current) (e.currentTarget as Element).releasePointerCapture(e.pointerId)
@@ -343,8 +346,11 @@ export function Timeline(): JSX.Element {
               clips.map((c) => {
                 const isActive = c.id === selectedClipId
                 const dim = selectedClipId != null && !isActive
-                const left = (localToGlobal(videos, c.videoId, c.in) / total) * 100
-                const width = Math.max(0.3, ((c.out - c.in) / total) * 100)
+                // 按全局起止画，跨视频的片段会自然跨过分界线
+                const gin = clipGlobalIn(videos, c)
+                const gout = clipGlobalOut(videos, c)
+                const left = (gin / total) * 100
+                const width = Math.max(0.3, ((gout - gin) / total) * 100)
                 return (
                   <div
                     key={c.id}
@@ -354,7 +360,7 @@ export function Timeline(): JSX.Element {
                       dim ? 'opacity-30' : ''
                     ].join(' ')}
                     style={{ left: `${left}%`, width: `${width}%` }}
-                    title={`${c.title || '未命名片段'}\n${fmtClock(c.in)} - ${fmtClock(c.out)}（${(c.out - c.in).toFixed(1)}s）`}
+                    title={`${c.title || '未命名片段'}\n${fmtClock(gin)} - ${fmtClock(gout)}（${(gout - gin).toFixed(1)}s）${isSpanning(c) ? '\n跨视频片段' : ''}`}
                     onPointerDown={(e) => {
                       e.stopPropagation()
                       selectClip(c.id)

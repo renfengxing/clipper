@@ -63,20 +63,20 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     const hi = Math.max(markIn, markOut)
     const loc = globalToLocal(videos, lo)
     if (!loc) return
-    const offset = videoOffset(videos, loc.video.id)
-    const inLocal = lo - offset
-    // 片段不能跨文件（片段随视频存 sidecar，跨了就没法归属）：出点钳到所属视频末尾
-    const wantOut = hi - offset
-    const outLocal = Math.min(wantOut, loc.video.duration || wantOut)
-    // 被钳过说明标记跨过了视频边界，记下来让界面能提示，别悄悄截断
-    set({ lastClipTrimmed: outLocal < wantOut - 0.05 })
-    if (outLocal - inLocal < 0.02) return // 太短或跨界
+    const inLocal = lo - videoOffset(videos, loc.video.id)
+    // 片段可以跨视频：终点落在哪个视频就记哪个，落盘时再按视频拆开存
+    const endLoc = globalToLocal(videos, hi)
+    if (!endLoc) return
+    const outLocal = endLoc.local
+    set({ lastClipTrimmed: false })
+    if (hi - lo < 0.02) return // 太短
     const cleanTags = Array.from(
       new Set((tags || []).map((x) => x.trim().slice(0, 15)).filter(Boolean))
     )
     const clip: Clip = {
       id: uuid(),
       videoId: loc.video.id,
+      endVideoId: endLoc.video.id !== loc.video.id ? endLoc.video.id : undefined,
       in: inLocal,
       out: outLocal,
       title: uniqueTitle(t, clips.map((c) => c.title)),
@@ -129,6 +129,36 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     }),
 
   // in/out 为局部时间，钳到所属视频时长内
+  /**
+   * 按全局时间改片段范围。跨视频时自动把两端归到各自的视频上 ——
+   * 手柄拖拽走这条，调用方不用关心边界在哪。
+   */
+  updateClipRange: (id, globalIn, globalOut) =>
+    set((s) => {
+      const clip = s.clips.find((c) => c.id === id)
+      if (!clip) return {}
+      const tot = s.videos.reduce((n, v) => n + (v.duration || 0), 0)
+      const lo = Math.max(0, Math.min(globalIn, globalOut))
+      const hi = Math.min(tot, Math.max(globalIn, globalOut))
+      if (hi - lo < 0.1) return {}
+      const a = globalToLocal(s.videos, lo)
+      const b = globalToLocal(s.videos, hi)
+      if (!a || !b) return {}
+      return {
+        clips: s.clips.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                videoId: a.video.id,
+                endVideoId: b.video.id !== a.video.id ? b.video.id : undefined,
+                in: a.local,
+                out: b.local
+              }
+            : c
+        )
+      }
+    }),
+
   updateClipTimes: (id, inLocal, outLocal) =>
     set((s) => {
       const clip = s.clips.find((c) => c.id === id)

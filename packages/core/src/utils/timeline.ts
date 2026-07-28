@@ -48,3 +48,39 @@ export function localToGlobal(videos: SourceVideo[], videoId: string, local: num
 export function clipGlobalIn(videos: SourceVideo[], clip: Clip): number {
   return localToGlobal(videos, clip.videoId, clip.in)
 }
+
+/** 片段在全局时间线上的终点 */
+export function clipGlobalOut(videos: SourceVideo[], clip: Clip): number {
+  return localToGlobal(videos, clip.endVideoId || clip.videoId, clip.out)
+}
+
+/**
+ * 把片段按视频切成若干段。不跨视频时就是一段。
+ * 落盘、导出、时间线绘制都用它，避免各处各写一遍边界逻辑。
+ */
+export function clipSegments(
+  videos: SourceVideo[],
+  clip: Clip
+): Array<{ video: SourceVideo; in: number; out: number }> {
+  const list = ordered(videos)
+  const startIdx = list.findIndex((v) => v.id === clip.videoId)
+  if (startIdx < 0) return []
+  const endId = clip.endVideoId || clip.videoId
+  const endIdx = list.findIndex((v) => v.id === endId)
+  if (endIdx < 0 || endIdx < startIdx) {
+    return [{ video: list[startIdx], in: clip.in, out: clip.out }]
+  }
+  const out: Array<{ video: SourceVideo; in: number; out: number }> = []
+  for (let i = startIdx; i <= endIdx; i++) {
+    const v = list[i]
+    const segIn = i === startIdx ? clip.in : 0
+    const segOut = i === endIdx ? clip.out : v.duration || 0
+    if (segOut - segIn > 0.02) out.push({ video: v, in: segIn, out: segOut })
+  }
+  return out
+}
+
+/** 是否跨了视频 */
+export function isSpanning(clip: Clip): boolean {
+  return !!clip.endVideoId && clip.endVideoId !== clip.videoId
+}

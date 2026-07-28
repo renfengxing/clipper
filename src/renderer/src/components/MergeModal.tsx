@@ -4,7 +4,7 @@ import type { ExportProgress } from '@core/types'
 import { APP_NAME } from '@core/constants'
 import { uuid } from '@core/utils/id'
 import { dirOf, basename } from '../utils/media'
-import { ordered } from '@core/utils/timeline'
+import { ordered, clipSegments } from '@core/utils/timeline'
 
 export function MergeModal(): JSX.Element | null {
   const open = useStore((s) => s.mergeOpen)
@@ -60,7 +60,20 @@ export function MergeModal(): JSX.Element | null {
       clips: selected
         .map((c) => {
           const v = videoById(c.videoId)
-          return v ? { sourcePath: v.path, in: c.in, out: c.out, title: c.title } : null
+          if (!v) return null
+          // 跨视频片段拆成分段，导出层会把它们接成一条连续视频
+          const segs = clipSegments(videos, c).map((g) => ({
+            videoRef: g.video.path,
+            in: g.in,
+            out: g.out
+          }))
+          return {
+            sourcePath: segs[0]?.videoRef || v.path,
+            in: segs[0]?.in ?? c.in,
+            out: segs[segs.length - 1]?.out ?? c.out,
+            title: c.title,
+            segments: segs
+          }
         })
         .filter((x): x is NonNullable<typeof x> => x !== null)
     })

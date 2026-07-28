@@ -13,7 +13,7 @@ import { useStore } from '@core/store/useStore'
 import { platform } from '@core/ports'
 import { APP_NAME } from '@core/constants'
 import { fmtClock } from '@core/utils/time'
-import { localToGlobal } from '@core/utils/timeline'
+import { localToGlobal, clipSegments } from '@core/utils/timeline'
 import { exportIdOf } from '../platform/ios'
 
 type Mode = 'export' | 'merge'
@@ -66,13 +66,23 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
     out: number
     title: string
     tags?: string[]
-  } => ({
-    videoRef: videos.find((v) => v.id === c.videoId)?.path || '',
-    in: c.in,
-    out: c.out,
-    title: c.title,
-    tags: c.tags
-  })
+    segments?: Array<{ videoRef: string; in: number; out: number }>
+  } => {
+    // 跨视频片段拆成几段传给导出层，由它拼成一条连续视频
+    const segs = clipSegments(videos, c).map((g) => ({
+      videoRef: g.video.path,
+      in: g.in,
+      out: g.out
+    }))
+    return {
+      videoRef: segs[0]?.videoRef || videos.find((v) => v.id === c.videoId)?.path || '',
+      in: segs[0]?.in ?? c.in,
+      out: segs[segs.length - 1]?.out ?? c.out,
+      title: c.title,
+      tags: c.tags,
+      segments: segs
+    }
+  }
 
   const run = async (): Promise<void> => {
     if (picked.length === 0 || !mode) return

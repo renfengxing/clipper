@@ -5,12 +5,20 @@ import UIKit
 
 // MARK: - 入参
 
+struct SegmentInput: Record {
+  @Field var sourcePath: String = ""
+  @Field var start: Double = 0
+  @Field var end: Double = 0
+}
+
 struct ClipInput: Record {
   @Field var id: String = ""
   @Field var sourcePath: String = ""
   @Field var start: Double = 0
   @Field var end: Double = 0
   @Field var title: String = ""
+  /// 跨视频片段的分段。为空则按 sourcePath/start/end 当作单段处理
+  @Field var segments: [SegmentInput] = []
 }
 
 struct ExportOptions: Record {
@@ -144,29 +152,49 @@ public class ClipperMediaModule: Module {
     watermark: String,
     onProgress: @escaping (Double) -> Void
   ) async throws -> URL {
-    guard let src = URL(string: clip.sourcePath) ?? URL(fileURLWithPath: clip.sourcePath) as URL? else {
-      throw ClipperError.badSource(clip.title)
-    }
-    let asset = AVURLAsset(url: src)
-    guard let vTrack = asset.tracks(withMediaType: .video).first else {
-      throw ClipperError.noVideoTrack(clip.title)
-    }
+    // 跨视频片段带多段来源，首尾相接拼成一条连续视频；单视频就是一段
+    let segs: [SegmentInput] =
+      clip.segments.isEmpty
+      ? {
+        let one = SegmentInput()
+        one.sourcePath = clip.sourcePath
+        one.start = clip.start
+        one.end = clip.end
+        return [one]
+      }()
+      : clip.segments
 
     let comp = AVMutableComposition()
-    let range = CMTimeRange(
-      start: CMTime(seconds: clip.start, preferredTimescale: 600),
-      end: CMTime(seconds: clip.end, preferredTimescale: 600)
-    )
-
     guard let compV = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)
     else { throw ClipperError.noVideoTrack(clip.title) }
-    try compV.insertTimeRange(range, of: vTrack, at: .zero)
-    compV.preferredTransform = vTrack.preferredTransform
+    let compA = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
 
-    if let aTrack = asset.tracks(withMediaType: .audio).first,
-      let compA = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-    {
-      try? compA.insertTimeRange(range, of: aTrack, at: .zero)
+    var cursor = CMTime.zero
+    var transformSet = false
+    for seg in segs {
+      guard let src = URL(string: seg.sourcePath) ?? URL(fileURLWithPath: seg.sourcePath) as URL? else {
+        throw ClipperError.badSource(clip.title)
+      }
+      let asset = AVURLAsset(url: src)
+      guard let vTrack = asset.tracks(withMediaType: .video).first else {
+        throw ClipperError.noVideoTrack(clip.title)
+      }
+      let range = CMTimeRange(
+        start: CMTime(seconds: seg.start, preferredTimescale: 600),
+        end: CMTime(seconds: seg.end, preferredTimescale: 600)
+      )
+      try compV.insertTimeRange(range, of: vTrack, at: cursor)
+      if !transformSet {
+        compV.preferredTransform = vTrack.preferredTransform
+        transformSet = true
+      }
+      if let aTrack = asset.tracks(withMediaType: .audio).first {
+        try? compA?.insertTimeRange(range, of: aTrack, at: cursor)
+      } else {
+        // 缺音轨要补静音，否则后面几段的声音会整体前移
+        compA?.insertEmptyTimeRange(CMTimeRange(start: cursor, duration: range.duration))
+      }
+      cursor = CMTimeAdd(cursor, range.duration)
     }
 
     // 标注为空时无需重编码，直接用直通导出（秒级、画质无损）
@@ -196,29 +224,48 @@ public class ClipperMediaModule: Module {
     var transformSet = false
 
     for clip in clips {
-      guard let src = URL(string: clip.sourcePath) ?? URL(fileURLWithPath: clip.sourcePath) as URL? else { continue }
-      let asset = AVURLAsset(url: src)
-      guard let vTrack = asset.tracks(withMediaType: .video).first else { continue }
-      let range = CMTimeRange(
-        start: CMTime(seconds: clip.start, preferredTimescale: 600),
-        end: CMTime(seconds: clip.end, preferredTimescale: 600)
-      )
-      try compV.insertTimeRange(range, of: vTrack, at: cursor)
-      if !transformSet {
-        // 以第一段的方向为准：混排不同方向的素材本就没有正确答案
-        compV.preferredTransform = vTrack.preferredTransform
-        transformSet = true
-      }
-      if let aTrack = asset.tracks(withMediaType: .audio).first {
-        try? compA?.insertTimeRange(range, of: aTrack, at: cursor)
-      } else {
-        // 没有音轨的片段要补静音，否则后面的声音会整体前移
-        compA?.insertEmptyTimeRange(CMTimeRange(start: cursor, duration: range.duration))
+      // 跨视频的片段本身就有多段，先展开再依次接上
+      let segs: [SegmentInput] =
+        clip.segments.isEmpty
+        ? {
+          let one = SegmentInput()
+          one.sourcePath = clip.sourcePath
+          one.start = clip.start
+          one.end = clip.end
+          return [one]
+        }()
+        : clip.segments
+
+      let clipStart = cursor
+      for seg in segs {
+        guard let src = URL(string: seg.sourcePath) ?? URL(fileURLWithPath: seg.sourcePath) as URL?
+        else { continue }
+        let asset = AVURLAsset(url: src)
+        guard let vTrack = asset.tracks(withMediaType: .video).first else { continue }
+        let range = CMTimeRange(
+          start: CMTime(seconds: seg.start, preferredTimescale: 600),
+          end: CMTime(seconds: seg.end, preferredTimescale: 600)
+        )
+        try compV.insertTimeRange(range, of: vTrack, at: cursor)
+        if !transformSet {
+          // 以第一段的方向为准：混排不同方向的素材本就没有正确答案
+          compV.preferredTransform = vTrack.preferredTransform
+          transformSet = true
+        }
+        if let aTrack = asset.tracks(withMediaType: .audio).first {
+          try? compA?.insertTimeRange(range, of: aTrack, at: cursor)
+        } else {
+          // 没有音轨的片段要补静音，否则后面的声音会整体前移
+          compA?.insertEmptyTimeRange(CMTimeRange(start: cursor, duration: range.duration))
+        }
+        cursor = CMTimeAdd(cursor, range.duration)
       }
       if burnSubtitle && !clip.title.isEmpty {
-        labels.append((text: clip.title, range: CMTimeRange(start: cursor, duration: range.duration)))
+        labels.append((
+          text: clip.title,
+          range: CMTimeRange(start: clipStart, duration: CMTimeSubtract(cursor, clipStart))
+        ))
       }
-      cursor = CMTimeAdd(cursor, range.duration)
     }
 
     let needsRender = !watermark.isEmpty || !labels.isEmpty

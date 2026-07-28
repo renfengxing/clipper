@@ -20,11 +20,17 @@ export interface Settings {
 }
 
 export interface ExportClipInput {
+  /** 首段来源。跨视频片段的其余段落见 segments */
   videoRef: string
   in: number
   out: number
   title: string
   tags?: string[]
+  /**
+   * 跨视频片段的完整分段（含首段）。缺省或长度 1 = 单视频，按 videoRef/in/out 处理。
+   * 导出时要把这些段首尾相接拼成一条连续视频。
+   */
+  segments?: Array<{ videoRef: string; in: number; out: number }>
 }
 
 export interface ExportResult {

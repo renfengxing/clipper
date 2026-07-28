@@ -41,6 +41,7 @@ export const desktopPlatform: Platform = {
       watermark: opts.watermark,
       clips: opts.clips.map((c) => ({
         sourcePath: c.videoRef,
+        segments: c.segments?.map((g) => ({ sourcePath: g.videoRef, in: g.in, out: g.out })),
         in: c.in,
         out: c.out,
         title: c.title,
@@ -55,6 +56,7 @@ export const desktopPlatform: Platform = {
       watermark: opts.watermark,
       clips: opts.clips.map((c) => ({
         sourcePath: c.videoRef,
+        segments: c.segments?.map((g) => ({ sourcePath: g.videoRef, in: g.in, out: g.out })),
         in: c.in,
         out: c.out,
         title: c.title,

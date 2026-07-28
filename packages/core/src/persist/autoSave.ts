@@ -1,5 +1,6 @@
 import { useStore } from '../store/useStore'
 import { platform } from '../ports'
+import { clipSegments } from '../utils/timeline'
 import { APP_NAME } from '../constants'
 
 /**
@@ -33,20 +34,30 @@ async function flush(): Promise<void> {
   if (!s.projectCreatedAt) useStore.setState({ projectCreatedAt: created })
   const now = new Date().toISOString()
 
-  // 1) 每个视频的片段 → 各自的 sidecar
+  // 1) 每个视频的片段 → 各自的 sidecar。
+  //    跨视频的片段按视频拆成几截分别写入，各截共用同一个 clip id，
+  //    载入时靠这个 id 拼回一条连续片段（span_of 标出总截数，便于校验）
   for (const v of s.videos) {
     const vclips = s.clips
-      .filter((c) => c.videoId === v.id)
+      .flatMap((c) => {
+        const segs = clipSegments(s.videos, c)
+        const mine = segs.find((g) => g.video.id === v.id)
+        if (!mine) return []
+        return [
+          {
+            id: c.id,
+            in: mine.in,
+            out: mine.out,
+            title: c.title,
+            created_at: c.created_at,
+            tags: c.tags || [],
+            span_of: segs.length > 1 ? segs.length : undefined,
+            span_index: segs.length > 1 ? segs.findIndex((g) => g.video.id === v.id) : undefined
+          }
+        ]
+      })
       .sort((a, b) => a.in - b.in)
-      .map((c, i) => ({
-        id: c.id,
-        in: c.in,
-        out: c.out,
-        title: c.title,
-        order: i,
-        created_at: c.created_at,
-        tags: c.tags || []
-      }))
+      .map((c, i) => ({ ...c, order: i }))
     await platform().saveData(platform().clipsKeyFor(v.path), {
       version: '1.1',
       app_name: APP_NAME,

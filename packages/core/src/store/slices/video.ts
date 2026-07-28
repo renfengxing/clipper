@@ -52,6 +52,36 @@ async function probeToSource(path: string, order: number): Promise<SourceVideo> 
   }
 }
 
+/**
+ * 把「各视频 sidecar 里读出来的片段截」拼回逻辑片段。
+ * 同一个 clip id 在多个视频里出现 = 一条跨视频片段：
+ * 起点取最靠前那个视频的 in，终点取最靠后那个视频的 out。
+ */
+function joinSpans(videos: SourceVideo[], pieces: Clip[]): Clip[] {
+  const list = ordered(videos)
+  const rank = new Map(list.map((v, i) => [v.id, i]))
+  const byId = new Map<string, Clip[]>()
+  for (const p of pieces) {
+    const arr = byId.get(p.id)
+    if (arr) arr.push(p)
+    else byId.set(p.id, [p])
+  }
+  const out: Clip[] = []
+  for (const group of byId.values()) {
+    if (group.length === 1) {
+      out.push(group[0])
+      continue
+    }
+    const sorted = [...group].sort(
+      (a, b) => (rank.get(a.videoId) ?? 0) - (rank.get(b.videoId) ?? 0)
+    )
+    const head = sorted[0]
+    const tail = sorted[sorted.length - 1]
+    out.push({ ...head, endVideoId: tail.videoId, out: tail.out })
+  }
+  return out
+}
+
 /** 读取某视频的片段数据（桌面=旁边的 sidecar），得到片段 + 该视频携带的标签词表 */
 async function loadSidecar(video: SourceVideo): Promise<{ clips: Clip[]; tags: string[] }> {
   const raw = (await platform().loadData(platform().clipsKeyFor(video.path))) as {
@@ -81,12 +111,13 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
   const loadAllSidecars = async (): Promise<void> => {
     const vids = ordered(get().videos)
     const results = await Promise.all(vids.map(loadSidecar))
-    const clips: Clip[] = []
+    const pieces: Clip[] = []
     const tagSet = new Set(get().videoTags)
     results.forEach((r) => {
-      r.clips.forEach((c) => clips.push({ ...c, order: clips.length }))
+      r.clips.forEach((c) => pieces.push(c))
       r.tags.forEach((t) => tagSet.add(t))
     })
+    const clips = joinSpans(vids, pieces).map((c, i) => ({ ...c, order: i }))
     set({ clips, videoTags: Array.from(tagSet) })
   }
 
@@ -111,7 +142,11 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
           r.clips.forEach((c) => newClips.push(c))
           r.tags.forEach((t) => tagSet.add(t))
         })
-        const clips = [...get().clips, ...newClips].map((c, i) => ({ ...c, order: i }))
+        // 新加的视频可能带来某条跨视频片段的另一半，和已有的合并
+        const clips = joinSpans(videos, [...get().clips, ...newClips]).map((c, i) => ({
+          ...c,
+          order: i
+        }))
         const patch: Partial<AppState> = { videos, clips, videoTags: Array.from(tagSet) }
         if (get().activeVideoId == null && added[0]) {
           patch.activeVideoId = added[0].id

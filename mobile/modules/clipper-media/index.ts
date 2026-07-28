@@ -6,6 +6,8 @@ export interface ClipInput {
   start: number
   end: number
   title: string
+  /** 跨视频片段的分段；为空则按 sourcePath/start/end 当单段处理 */
+  segments?: Array<{ sourcePath: string; start: number; end: number }>
 }
 
 export interface ProgressEvent {

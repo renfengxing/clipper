@@ -3,7 +3,15 @@ import { View, Text, StyleSheet, PanResponder, LayoutChangeEvent, Pressable, Ale
 import * as Haptics from 'expo-haptics'
 import { useStore } from '@core/store/useStore'
 import { fmtMs } from '@core/utils/time'
-import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/timeline'
+import {
+  ordered,
+  totalDuration,
+  videoOffset,
+  localToGlobal,
+  clipGlobalIn,
+  clipGlobalOut,
+  isSpanning
+} from '@core/utils/timeline'
 
 /**
  * 手机时间线：多视频分段 + 片段色条 + 待标记高亮 + 游标 + 选中片段的起止手柄。
@@ -35,7 +43,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const removeVideo = useStore((s) => s.removeVideo)
   const pause = useStore((s) => s.pause)
   const resume = useStore((s) => s.resume)
-  const updateClipTimes = useStore((s) => s.updateClipTimes)
+  const updateClipRange = useStore((s) => s.updateClipRange)
   const deselectClip = useStore((s) => s.deselectClip)
 
   const [width, setWidth] = useState(0)
@@ -43,8 +51,8 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const total = totalDuration(videos)
 
   const sel = clips.find((c) => c.id === selectedClipId) || null
-  const selGin = sel ? localToGlobal(videos, sel.videoId, sel.in) : 0
-  const selGout = sel ? localToGlobal(videos, sel.videoId, sel.out) : 0
+  const selGin = sel ? clipGlobalIn(videos, sel) : 0
+  const selGout = sel ? clipGlobalOut(videos, sel) : 0
 
   // 可视时间窗口。null = 看全长
   const [zoom, setZoom] = useState<{ start: number; end: number } | null>(null)
@@ -57,8 +65,8 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     }
     const c = clips.find((x) => x.id === selectedClipId)
     if (!c) return
-    const gin = localToGlobal(videos, c.videoId, c.in)
-    const gout = localToGlobal(videos, c.videoId, c.out)
+    const gin = clipGlobalIn(videos, c)
+    const gout = clipGlobalOut(videos, c)
     const pad = Math.max(3, (gout - gin) * 1.2)
     setZoom({ start: Math.max(0, gin - pad), end: Math.min(total || gout + pad, gout + pad) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,7 +85,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     selectClip,
     pause,
     resume,
-    updateClipTimes,
+    updateClipRange,
     deselectClip,
     viewStart,
     viewSpan
@@ -91,7 +99,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     selectClip,
     pause,
     resume,
-    updateClipTimes,
+    updateClipRange,
     deselectClip,
     viewStart,
     viewSpan
@@ -114,11 +122,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   /** 该全局时间落在哪个片段上（用于区分「点片段」和「拖轨道」） */
   const clipAt = (t: number): string | null => {
     const { clips: cs, videos: vs } = ref.current
-    const hit = cs.find((c) => {
-      const gin = localToGlobal(vs, c.videoId, c.in)
-      const gout = localToGlobal(vs, c.videoId, c.out)
-      return t >= gin && t <= gout
-    })
+    const hit = cs.find((c) => t >= clipGlobalIn(vs, c) && t <= clipGlobalOut(vs, c))
     return hit?.id ?? null
   }
 
@@ -150,30 +154,28 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         setAtEdge(null)
         edgeBuzzRef.current = false
         const c = ref.current.clips.find((x) => x.id === selectedIdRef.current)
-        dragBaseRef.current = c ? { in: c.in, out: c.out } : null
+        // 基准记全局时间：跨视频时局部时间会换参照系，只有全局是连续的
+        dragBaseRef.current = c
+          ? { in: clipGlobalIn(ref.current.videos, c), out: clipGlobalOut(ref.current.videos, c) }
+          : null
         setDragging(which)
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
       },
       onPanResponderMove: (_e, g) => {
-        const { clips: cs, videos: vs } = ref.current
+        const { clips: cs, total: tot } = ref.current
         const base = dragBaseRef.current
         const c = cs.find((x) => x.id === selectedIdRef.current)
         const w = widthRef.current
         if (!c || !base || w <= 0) return
         const delta = (g.dx / w) * ref.current.viewSpan
-        const off = videoOffset(vs, c.videoId)
-        const v = vs.find((x) => x.id === c.videoId)
-        const maxLocal = v?.duration && v.duration > 0 ? v.duration : base.out + 3600
+        // 全局时间上算，跨不跨视频都一样；落到哪个视频由 updateClipRange 决定
         const wantIn = base.in + delta
         const wantOut = base.out + delta
         const nin = which === 'in' ? Math.max(0, Math.min(wantIn, base.out - 0.1)) : base.in
-        const nout =
-          which === 'out' ? Math.min(maxLocal, Math.max(wantOut, base.in + 0.1)) : base.out
+        const nout = which === 'out' ? Math.min(tot, Math.max(wantOut, base.in + 0.1)) : base.out
 
-        // 顶到所属视频的头或尾：给一次震动 + 标记，别让人以为是拖不动
-        const hitStart = which === 'in' && wantIn < 0
-        const hitEnd = which === 'out' && wantOut > maxLocal
-        const edge = hitStart ? 'start' : hitEnd ? 'end' : null
+        // 只在顶到整条时间线的头/尾时提示，视频之间的边界现在可以自由跨过
+        const edge = which === 'in' && wantIn < 0 ? 'start' : which === 'out' && wantOut > tot ? 'end' : null
         setAtEdge(edge)
         if (edge && !edgeBuzzRef.current) {
           edgeBuzzRef.current = true
@@ -182,8 +184,8 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           edgeBuzzRef.current = false
         }
 
-        ref.current.updateClipTimes(c.id, nin, nout)
-        const g0 = off + (which === 'in' ? nin : nout)
+        ref.current.updateClipRange(c.id, nin, nout)
+        const g0 = which === 'in' ? nin : nout
         ref.current.seek(g0)
 
         // 拖到窗口边缘就让窗口跟着平移，否则手柄会跑到屏幕外，
@@ -191,7 +193,6 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         // 拖动手感才是线性的
         const vs0 = ref.current.viewStart
         const span = ref.current.viewSpan
-        const tot = ref.current.total
         const margin = span * 0.12
         let shift = 0
         if (g0 < vs0 + margin) shift = g0 - margin - vs0
@@ -294,7 +295,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           <Text style={s.editDur}>{(sel.out - sel.in).toFixed(1)}s</Text>
           {atEdge ? (
             <Text style={s.editWarn}>
-              已到本视频{atEdge === 'start' ? '开头' : '结尾'} · 片段不能跨视频
+              已到时间线{atEdge === 'start' ? '开头' : '结尾'}
             </Text>
           ) : (
             <>
@@ -368,10 +369,15 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           ))}
 
           {clips.map((c) => {
-            const left = pct(localToGlobal(videos, c.videoId, c.in))
-            const w = Math.max(2, pct(localToGlobal(videos, c.videoId, c.out)) - left)
+            const left = pct(clipGlobalIn(videos, c))
+            const w = Math.max(2, pct(clipGlobalOut(videos, c)) - left)
             const on = c.id === selectedClipId
-            return <View key={c.id} style={[s.clip, { left, width: w }, on && s.clipActive]} />
+            return (
+              <View
+                key={c.id}
+                style={[s.clip, { left, width: w }, on && s.clipActive, isSpanning(c) && s.clipSpan]}
+              />
+            )
           })}
 
           {markIn != null && markOut == null && currentTime > markIn && (
@@ -444,6 +450,8 @@ const s = StyleSheet.create({
   divider: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#475569' },
   clip: { position: 'absolute', top: 4, bottom: 4, backgroundColor: 'rgba(59,130,246,0.8)', borderRadius: 2 },
   clipActive: { backgroundColor: '#22d3ee' },
+  // 跨视频的片段描个边，一眼能看出它接了两段素材
+  clipSpan: { borderWidth: 1, borderColor: '#a78bfa' },
   pending: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(250,204,21,0.3)' },
   cursor: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#22d3ee' },
 
