@@ -28,6 +28,8 @@ import { VideoSheet } from './src/components/VideoSheet'
 import { ReportSheet } from './src/components/ReportSheet'
 import { SettingsSheet } from './src/components/SettingsSheet'
 import { ExportSheet } from './src/components/ExportSheet'
+import { Subtitle } from './src/components/Subtitle'
+import { RecentList } from './src/components/RecentList'
 
 /** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop 余量 */
 const LAND_BOTTOM_ZONE = 76
@@ -235,7 +237,10 @@ export default function App(): JSX.Element {
       }}
     />
   ) : (
-    <Text style={s.hint}>还没有视频{'\n'}点「＋ 相册」开始</Text>
+    <>
+      <Text style={s.hint}>还没有视频{'\n'}点「＋ 相册」开始</Text>
+      <RecentList />
+    </>
   )
 
   const playErrorOverlay = playError ? (
@@ -317,6 +322,7 @@ export default function App(): JSX.Element {
           <View style={s.landRow}>
             <VideoStage onFlick={onFlick} enabled={!!active} bottomInset={LAND_BOTTOM_ZONE}>
               {videoEl}
+              <Subtitle />
               {markingOverlay}
               {playErrorOverlay}
 
@@ -378,6 +384,7 @@ export default function App(): JSX.Element {
         <View style={s.portVideo}>
           <VideoStage onFlick={onFlick} enabled={!!active}>
             {videoEl}
+            <Subtitle />
             {markingOverlay}
             {playErrorOverlay}
           </VideoStage>

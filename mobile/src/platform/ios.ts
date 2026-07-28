@@ -33,6 +33,11 @@ function safeName(key: string): string {
   return `${tail}_${(h >>> 0).toString(36)}`
 }
 
+/** 导出记录的键：同一个视频的同一段时间即视为同一次导出 */
+export function exportIdOf(c: { videoRef: string; in: number; out: number }): string {
+  return `${refKey(c.videoRef)}#${c.in.toFixed(2)}-${c.out.toFixed(2)}`
+}
+
 /** 用文件名（内含相册资源 id）做稳定 key，跨重装仍能对上同一个视频 */
 function refKey(videoRef: string): string {
   return safeName(decodeURIComponent(videoRef.split('/').pop() || videoRef))
@@ -123,7 +128,9 @@ export const iosPlatform: Platform = {
   // 注意只取文件名做 key：完整路径里含 app 容器 UUID，每次重装都会变，
   // 拿整条路径做 key 会让重装后的数据全部对不上号
   clipsKeyFor: (videoRef) => DATA_DIR + refKey(videoRef) + '.clips.json',
-  timelineKeyFor: (videoRef) => DATA_DIR + refKey(videoRef) + '.kkclip.json',
+  // 必须以 .kkclip 结尾：core 的 openVideoPath 靠这个后缀区分「时间线」和「裸视频」，
+  // 「最近打开」列表里存的正是这个 key
+  timelineKeyFor: (videoRef) => DATA_DIR + refKey(videoRef) + '.kkclip',
 
   async loadData(key) {
     try {
@@ -227,27 +234,33 @@ ${lines}`
    */
   async exportClips(opts) {
     const exports: Record<string, string> = { ...(opts.priorExports || {}) }
+    // iOS 写的是相册，没法像桌面那样去目标目录里看文件在不在，
+    // 所以用「导出记录」判重：记录随时间线一起保存，跨启动仍然有效
+    const wanted = opts.clips.map((c, i) => ({
+      id: exportIdOf(c),
+      sourcePath: c.videoRef,
+      start: c.in,
+      end: c.out,
+      title: c.title || `片段${i + 1}`
+    }))
+    const todo = opts.skipExisting ? wanted.filter((c) => !exports[c.id]) : wanted
+    const skipped = wanted.length - todo.length
+    if (todo.length === 0) return { exported: 0, skipped, failed: 0, exports }
     try {
       const res = await ClipperMedia.exportClips({
         albumName: ALBUM_NAME,
         burnSubtitle: true,
         watermark: opts.watermark || '',
-        clips: opts.clips.map((c, i) => ({
-          id: `${c.videoRef}#${c.in}-${c.out}`,
-          sourcePath: c.videoRef,
-          start: c.in,
-          end: c.out,
-          title: c.title || `片段${i + 1}`
-        }))
+        clips: todo
       })
       const now = new Date().toISOString()
       res.ids.forEach((id) => {
         exports[id] = now
       })
-      return { exported: res.count, skipped: 0, failed: 0, exports }
+      return { exported: res.count, skipped, failed: 0, exports }
     } catch (err) {
       console.warn('导出失败:', err)
-      return { exported: 0, skipped: 0, failed: opts.clips.length, exports }
+      return { exported: 0, skipped, failed: todo.length, exports }
     }
   },
 

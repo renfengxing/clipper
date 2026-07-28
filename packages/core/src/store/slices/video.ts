@@ -117,6 +117,11 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
           patch.activeVideoId = added[0].id
           patch.pendingSeekLocal = 0
           patch.currentTime = 0
+          // 选完片直接开播，不用再点一次播放。
+          // 播放器就绪后由 applyPendingSeek 真正下发 play()
+          patch.playing = true
+          patch.direction = 'forward'
+          patch.rate = 1
         }
         if (cur.length === 0 && added[0]) {
           // 时间线按"视频"建，避免同目录多场比赛互相串。

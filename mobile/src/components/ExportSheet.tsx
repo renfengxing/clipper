@@ -14,6 +14,7 @@ import { platform } from '@core/ports'
 import { APP_NAME } from '@core/constants'
 import { fmtClock } from '@core/utils/time'
 import { localToGlobal } from '@core/utils/timeline'
+import { exportIdOf } from '../platform/ios'
 
 type Mode = 'export' | 'merge'
 
@@ -38,6 +39,7 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
 
   const [subtitle, setSubtitle] = useState(true)
   const [watermark, setWatermark] = useState(false)
+  const [skipDone, setSkipDone] = useState(true)
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ index: number; total: number; name: string } | null>(null)
   const [result, setResult] = useState<string | null>(null)
@@ -82,16 +84,15 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
         const res = await platform().exportClips({
           outDir: '',
           clips: picked.map(toInput),
-          skipExisting: false,
+          skipExisting: skipDone,
           priorExports: exportHistory,
           watermark: watermark ? APP_NAME : undefined
         })
         setExportHistory(res.exports)
-        setResult(
-          res.failed > 0
-            ? `导出 ${res.exported} 个，失败 ${res.failed} 个`
-            : `已导出 ${res.exported} 个片段到相册`
-        )
+        const parts = [`已导出 ${res.exported} 个片段到相册`]
+        if (res.skipped > 0) parts.push(`跳过 ${res.skipped} 个已导出过的`)
+        if (res.failed > 0) parts.push(`失败 ${res.failed} 个`)
+        setResult(parts.join('，'))
       } else {
         const res = await platform().mergeClips({
           outDir: '',
@@ -164,6 +165,7 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
                     <Text style={s.rowSub}>
                       {(c.out - c.in).toFixed(1)}s
                       {(c.tags || []).length ? ` · ${(c.tags || []).join(' ')}` : ''}
+                      {exportHistory[exportIdOf(toInput(c))] ? ' · 已导出' : ''}
                     </Text>
                   </View>
                 </Pressable>
@@ -183,6 +185,12 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
               <Text style={s.optLabel}>右下角加水印</Text>
               <Switch value={watermark} onValueChange={setWatermark} />
             </View>
+            {mode === 'export' && (
+              <View style={s.optRow}>
+                <Text style={s.optLabel}>跳过已导出过的片段</Text>
+                <Switch value={skipDone} onValueChange={setSkipDone} />
+              </View>
+            )}
             <Text style={s.optNote}>
               成品保存到相册的「{APP_NAME}」相册。烧字幕/水印需要重新编码，比直接裁剪慢不少。
             </Text>
