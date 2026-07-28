@@ -179,7 +179,9 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
     },
 
     openVideoPath: async (path) => {
-      if (path.endsWith('.kkclip')) {
+      // .kkclip.json 是 iOS 早期版本的时间线后缀。「最近打开」里可能还留着这种旧记录，
+      // 漏掉它就会走进下面的「裸视频」分支，把一个 JSON 文件喂给播放器 —— 于是报 -11800
+      if (path.endsWith('.kkclip') || path.endsWith('.kkclip.json')) {
         const raw = await platform().loadData(path)
         set(resetState())
         get().hydrateProject(raw, stripExt(basename(path)))

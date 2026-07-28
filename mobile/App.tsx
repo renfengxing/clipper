@@ -246,7 +246,11 @@ export default function App(): JSX.Element {
   const playErrorOverlay = playError ? (
     <View style={s.playError} pointerEvents="none">
       <Text style={s.playErrorTitle}>这个视频打不开</Text>
-      <Text style={s.playErrorMsg} numberOfLines={4}>
+      {/* 带上实际的文件路径：光看 AVFoundation 的错误码判断不出是路径不对还是文件本身有问题 */}
+      <Text style={s.playErrorMsg} numberOfLines={3}>
+        {decodeURIComponent(active?.url || '').replace(/^.*\/Documents\//, 'Documents/')}
+      </Text>
+      <Text style={s.playErrorMsg} numberOfLines={3}>
         {playError}
       </Text>
     </View>
