@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { View, Text, StyleSheet, PanResponder, Animated } from 'react-native'
+import {
+  View,
+  Text,
+  StyleSheet,
+  PanResponder,
+  Animated,
+  type GestureResponderEvent
+} from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { useStore } from '@core/store/useStore'
 
@@ -61,11 +68,27 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
   const [pick, setPick] = useState<Pick | null>(null)
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 })
   const stageRef = useRef<Size>({ w: 0, h: 0 })
+  const viewRef = useRef<View>(null)
+  /** stage 在窗口里的原点，用来把 pageX/pageY 换算成 stage 内坐标 */
+  const originRef = useRef({ x: 0, y: 0 })
   const insetRef = useRef(bottomInset)
   insetRef.current = bottomInset
+
+  /**
+   * 一律用 pageX/pageY 换算，绝不能用 locationX/locationY ——
+   * 后者是相对「触摸目标」算的，摸在时间线等子 View 上时会得到相对那个子 View 的坐标，
+   * 于是死区判定失效、弹窗位置也被算到屏幕角落去。
+   */
+  const localPoint = (e: GestureResponderEvent): { x: number; y: number } => ({
+    x: e.nativeEvent.pageX - originRef.current.x,
+    y: e.nativeEvent.pageY - originRef.current.y
+  })
+
   /** 触点是否落在底部时间线专属区 */
-  const inDeadZone = (y: number): boolean =>
-    insetRef.current > 0 && stageRef.current.h > 0 && y > stageRef.current.h - insetRef.current
+  const inDeadZone = (e: GestureResponderEvent): boolean =>
+    insetRef.current > 0 &&
+    stageRef.current.h > 0 &&
+    localPoint(e).y > stageRef.current.h - insetRef.current
   const [bar, setBar] = useState<Size>({ w: 0, h: 0 })
   const holdRef = useRef(false)
   const movedRef = useRef(false)
@@ -109,23 +132,22 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
 
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: (e) => !inDeadZone(e.nativeEvent.locationY),
-      onMoveShouldSetPanResponder: (e, g) =>
-        !inDeadZone(e.nativeEvent.locationY) && (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
+      onStartShouldSetPanResponder: (e) => !inDeadZone(e),
+      onMoveShouldSetPanResponder: (e, g) => !inDeadZone(e) && (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
       onPanResponderGrant: (e) => {
         if (!cbRef.current.enabled) return
         holdRef.current = false
         movedRef.current = false
         // 按住一小会儿 → 进入调速模式（与「快速滑动」区分开）
         clearTimer()
-        const { locationX, locationY } = e.nativeEvent
+        const at = localPoint(e)
         timerRef.current = setTimeout(() => {
           holdRef.current = true
           // 选倍率时先把画面停住：正放/快进/慢放/倒放都停，看清当前这一帧再决定
           wasPlayingRef.current = useStore.getState().playing
           if (wasPlayingRef.current) cbRef.current.pause()
           // 先亮出正向条做提示，未选中任何档
-          setPickBoth({ dir: 'fwd', idx: -1, x: locationX, y: locationY })
+          setPickBoth({ dir: 'fwd', idx: -1, x: at.x, y: at.y })
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
         }, HOLD_MS)
       },
@@ -213,11 +235,16 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
 
   return (
     <View
+      ref={viewRef}
       style={s.stage}
       onLayout={(e) => {
         const { width: w, height: h } = e.nativeEvent.layout
         stageRef.current = { w, h }
         setStage({ w, h })
+        // 记录自身在窗口里的原点，供 pageX/pageY 换算
+        viewRef.current?.measureInWindow((x, y) => {
+          originRef.current = { x, y }
+        })
       }}
       {...pan.panHandlers}
     >

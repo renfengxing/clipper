@@ -8,6 +8,7 @@ interface Props {
   videoCount: number
   onPickVideos: () => void
   onManageVideos: () => void
+  onTools: () => void
 }
 
 /**
@@ -19,7 +20,8 @@ export function Controls({
   compact,
   videoCount,
   onPickVideos,
-  onManageVideos
+  onManageVideos,
+  onTools
 }: Props): JSX.Element {
   return (
     <View style={[s.row, floating && s.rowFloat, compact && s.rowCompact]}>
@@ -31,6 +33,9 @@ export function Controls({
           <Text style={[s.txt, floating && s.txtFloat]}>视频 {videoCount}</Text>
         </Pressable>
       )}
+      <Pressable style={[s.btn, floating && s.btnFloat]} onPress={onTools}>
+        <Text style={[s.txt, floating && s.txtFloat]}>⋯</Text>
+      </Pressable>
       {!compact && (
         <Text style={s.hint} numberOfLines={1}>
           轻点播放 · 按住右滑慢放/快进 · 左滑快退

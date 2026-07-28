@@ -23,6 +23,9 @@ import { Controls } from './src/components/Controls'
 import { VideoStage } from './src/components/VideoStage'
 import { AlbumPicker } from './src/components/AlbumPicker'
 import { VideoSheet } from './src/components/VideoSheet'
+import { ToolsSheet } from './src/components/ToolsSheet'
+import { SettingsSheet } from './src/components/SettingsSheet'
+import { ExportSheet } from './src/components/ExportSheet'
 
 /** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop 余量 */
 const LAND_BOTTOM_ZONE = 76
@@ -57,6 +60,9 @@ export default function App(): JSX.Element {
   const [playError, setPlayError] = useState<string | null>(null)
   const [listOpen, setListOpen] = useState(false) // 默认收起，全屏看画面（#4）
   const [videoSheetOpen, setVideoSheetOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [exportMode, setExportMode] = useState<'export' | 'merge' | null>(null)
 
   // 片段/时间线自动落盘。此前手机端完全没有保存，退出即丢
   useEffect(() => startAutoSave(), [])
@@ -239,6 +245,15 @@ export default function App(): JSX.Element {
       <TitleSheet />
       <AlbumPicker />
       <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
+      <ToolsSheet
+        visible={toolsOpen}
+        onClose={() => setToolsOpen(false)}
+        onExport={() => setExportMode('export')}
+        onMerge={() => setExportMode('merge')}
+        onSettings={() => setSettingsOpen(true)}
+      />
+      <SettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ExportSheet mode={exportMode} onClose={() => setExportMode(null)} />
       {importOverlay}
     </>
   )
@@ -267,6 +282,7 @@ export default function App(): JSX.Element {
                     videoCount={videos.length}
                     onPickVideos={() => void chooseAndAddVideos()}
                     onManageVideos={() => setVideoSheetOpen(true)}
+                    onTools={() => setToolsOpen(true)}
                   />
                   <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
                     <Text style={s.listToggleText}>
@@ -323,6 +339,7 @@ export default function App(): JSX.Element {
           videoCount={videos.length}
           onPickVideos={() => void chooseAndAddVideos()}
           onManageVideos={() => setVideoSheetOpen(true)}
+          onTools={() => setToolsOpen(true)}
         />
         {markButton(true)}
         <ClipList />

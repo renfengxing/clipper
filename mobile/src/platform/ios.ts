@@ -1,6 +1,8 @@
 import * as FileSystem from 'expo-file-system'
 import type { Platform, Settings } from '@core/ports'
 import { requestPickVideos } from './pickerBridge'
+import { ClipperMedia, onProgress as onNativeProgress } from '../../modules/clipper-media'
+import type { ExportProgress } from '@core/types'
 
 /** 选片时相册已给出时长，缓存下来省一次探测（fps 拿不到，先按 30 兜底） */
 const metaCache = new Map<string, { duration: number; fps: number }>()
@@ -11,6 +13,9 @@ const metaCache = new Map<string, { duration: number; fps: number }>()
  * 关键差异：相册视频旁边写不了 sidecar，所以工程数据一律存 app 沙盒，
  * 以 videoRef 的哈希做文件名 —— 这正是 Platform 端口把 key 抽象出来的原因。
  */
+
+/** 导出去向：系统相册里的这个相册（iOS 没有「选文件夹」的概念） */
+const ALBUM_NAME = '宽宽爸视频切片'
 
 const DATA_DIR = FileSystem.documentDirectory + 'clipper/'
 const SETTINGS_FILE = DATA_DIR + 'settings.json'
@@ -215,14 +220,68 @@ ${lines}`
     }
   },
 
-  // —— 导出：iOS 用 AVFoundation（后续接原生模块），先留占位 ——
-  async exportClips() {
-    throw new Error('iOS 导出尚未接入（计划用 AVAssetExportSession）')
+  /**
+   * —— 导出 / 合并：走本地原生模块 ClipperMedia（AVFoundation）——
+   * iOS 没有「选个文件夹」的概念，一律写回系统相册的同名相册里，
+   * 所以 outDir 在这里当相册名用。
+   */
+  async exportClips(opts) {
+    const exports: Record<string, string> = { ...(opts.priorExports || {}) }
+    try {
+      const res = await ClipperMedia.exportClips({
+        albumName: ALBUM_NAME,
+        burnSubtitle: true,
+        watermark: opts.watermark || '',
+        clips: opts.clips.map((c, i) => ({
+          id: `${c.videoRef}#${c.in}-${c.out}`,
+          sourcePath: c.videoRef,
+          start: c.in,
+          end: c.out,
+          title: c.title || `片段${i + 1}`
+        }))
+      })
+      const now = new Date().toISOString()
+      res.ids.forEach((id) => {
+        exports[id] = now
+      })
+      return { exported: res.count, skipped: 0, failed: 0, exports }
+    } catch (err) {
+      console.warn('导出失败:', err)
+      return { exported: 0, skipped: 0, failed: opts.clips.length, exports }
+    }
   },
-  async mergeClips() {
-    throw new Error('iOS 合并尚未接入（计划用 AVMutableComposition）')
+
+  async mergeClips(opts) {
+    try {
+      await ClipperMedia.mergeClips({
+        albumName: ALBUM_NAME,
+        name: opts.name,
+        burnSubtitle: opts.burnSubtitle !== false,
+        watermark: opts.watermark || '',
+        clips: opts.clips.map((c, i) => ({
+          id: String(i),
+          sourcePath: c.videoRef,
+          start: c.in,
+          end: c.out,
+          title: c.title || ''
+        }))
+      })
+      return { ok: true, outPath: `相册 · ${ALBUM_NAME}` }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
   },
-  onExportProgress() {
-    return () => {}
+
+  onExportProgress(cb) {
+    const sub = onNativeProgress((e) => {
+      const p: ExportProgress = {
+        index: e.index,
+        total: e.total,
+        name: e.name,
+        status: e.progress >= 1 ? 'done' : 'running'
+      }
+      cb(p)
+    })
+    return () => sub.remove()
   }
 }

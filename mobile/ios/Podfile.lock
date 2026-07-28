@@ -1,5 +1,7 @@
 PODS:
   - boost (1.83.0)
+  - ClipperMedia (1.0.0):
+    - ExpoModulesCore
   - DoubleConversion (1.1.6)
   - EXAV (14.0.7):
     - ExpoModulesCore
@@ -1240,6 +1242,7 @@ PODS:
 
 DEPENDENCIES:
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
+  - ClipperMedia (from `../modules/clipper-media/ios`)
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
   - EXAV (from `../node_modules/expo-av/ios`)
   - EXConstants (from `../node_modules/expo-constants/ios`)
@@ -1317,6 +1320,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   boost:
     :podspec: "../node_modules/react-native/third-party-podspecs/boost.podspec"
+  ClipperMedia:
+    :path: "../modules/clipper-media/ios"
   DoubleConversion:
     :podspec: "../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec"
   EXAV:
@@ -1455,6 +1460,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   boost: d3f49c53809116a5d38da093a8aa78bf551aed09
+  ClipperMedia: b06d630f93ebefb83466efd055836281c95381de
   DoubleConversion: 76ab83afb40bddeeee456813d9c04f67f78771b5
   EXAV: 64e72329d2f8c2ba13608fed4a713af4e793242d
   EXConstants: 89d35611505a8ce02550e64e43cd05565da35f9a
