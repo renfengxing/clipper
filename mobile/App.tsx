@@ -43,6 +43,7 @@ export default function App(): JSX.Element {
 
   const videoRef = useRef<Video>(null)
   const [ready, setReady] = useState(false)
+  const [playError, setPlayError] = useState<string | null>(null)
   const [listOpen, setListOpen] = useState(false) // 默认收起，全屏看画面（#4）
   const [videoSheetOpen, setVideoSheetOpen] = useState(false)
 
@@ -57,6 +58,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     setReady(false)
+    setPlayError(null)
   }, [active?.id])
 
   useEffect(() => {
@@ -141,8 +143,13 @@ export default function App(): JSX.Element {
       style={StyleSheet.absoluteFill}
       resizeMode={ResizeMode.CONTAIN}
       onLoad={() => setReady(true)}
+      // 播放器出错时把原因显示出来，别让人对着黑屏猜
+      onError={(e) => setPlayError(typeof e === 'string' ? e : JSON.stringify(e))}
       onPlaybackStatusUpdate={(st) => {
-        if (!st.isLoaded) return
+        if (!st.isLoaded) {
+          if (st.error) setPlayError(st.error)
+          return
+        }
         syncLocalTime((st.positionMillis || 0) / 1000)
         if (st.didJustFinish) onVideoEnded()
       }}
@@ -150,6 +157,15 @@ export default function App(): JSX.Element {
   ) : (
     <Text style={s.hint}>还没有视频{'\n'}点「＋ 相册」开始</Text>
   )
+
+  const playErrorOverlay = playError ? (
+    <View style={s.playError} pointerEvents="none">
+      <Text style={s.playErrorTitle}>这个视频打不开</Text>
+      <Text style={s.playErrorMsg} numberOfLines={4}>
+        {playError}
+      </Text>
+    </View>
+  ) : null
 
   const markingOverlay = marking ? (
     <View style={s.markOverlay} pointerEvents="none">
@@ -206,6 +222,7 @@ export default function App(): JSX.Element {
           <VideoStage onFlick={onFlick} enabled={!!active}>
             {videoEl}
             {markingOverlay}
+            {playErrorOverlay}
 
             <View style={s.landTopBar} pointerEvents="box-none">
               <View style={s.pill} pointerEvents="none">
@@ -259,6 +276,7 @@ export default function App(): JSX.Element {
         <VideoStage onFlick={onFlick} enabled={!!active}>
           {videoEl}
           {markingOverlay}
+          {playErrorOverlay}
         </VideoStage>
       </View>
       <View style={s.infoRow}>
@@ -368,5 +386,17 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  importText: { color: '#e2e8f0', fontSize: 15, marginTop: 14 }
+  importText: { color: '#e2e8f0', fontSize: 15, marginTop: 14 },
+
+  playError: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    backgroundColor: 'rgba(127,29,29,0.85)',
+    borderRadius: 12,
+    padding: 14
+  },
+  playErrorTitle: { color: '#fecaca', fontSize: 15, fontWeight: '500' },
+  playErrorMsg: { color: 'rgba(254,226,226,0.8)', fontSize: 11, marginTop: 7, textAlign: 'center' }
 })

@@ -26,6 +26,10 @@ export function VideoSheet({ visible, onClose }: Props): JSX.Element {
 
   const list = ordered(videos)
 
+  // 关着的时候整个 Modal 都不要挂：iOS 上每个 RN Modal 都带一个 UIViewController，
+  // 常驻的模态宿主会跟 App 的支持方向打架，转屏时来回抖个不停
+  if (!visible) return <></>
+
   const askRemove = (id: string, name: string, n: number): void =>
     Alert.alert(
       '移除这个视频',

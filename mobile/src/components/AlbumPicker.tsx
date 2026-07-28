@@ -8,13 +8,21 @@ import {
   FlatList,
   ActivityIndicator,
   StyleSheet,
+  Linking,
   useWindowDimensions
 } from 'react-native'
 import * as MediaLibrary from 'expo-media-library'
+import * as FileSystem from 'expo-file-system'
 import { registerPicker, type PickedVideo } from '../platform/pickerBridge'
 
 const PAGE = 90
 const GAP = 2
+/** 导入后的视频落地处。按相册资源 id 命名 → 同一场比赛再选一次直接命中，无需再拷 */
+const IMPORT_DIR = FileSystem.cacheDirectory + 'picked/'
+
+function safeName(s: string): string {
+  return s.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-40)
+}
 
 function fmtDur(ms: number): string {
   const t = Math.round(ms / 1000)
@@ -27,8 +35,11 @@ function fmtDur(ms: number): string {
  *
  * 为什么不用 expo-image-picker：它对视频会先按「兼容格式」转码，再整个文件
  * 拷进 app 沙盒 —— 4K HEVC 的比赛视频动辄上 GB，要等几十秒到几分钟，且全程无反馈。
- * 这里直接用 MediaLibrary 的 localUri（相册里的原始文件路径），零拷贝零转码，
- * 选完立刻就能播；缩略图由系统按需生成，滚动也不卡。
+ * 这里改用 MediaLibrary：缩略图由系统按需生成，滚动不卡；选中后只做一次**纯文件拷贝**
+ * （不转码），并按相册资源 id 缓存，同一场比赛再选一次直接命中。
+ *
+ * 为什么必须拷：expo-av 走 AVURLAsset URLAssetWithURL，没有 PHAsset 通道，
+ * 既播不了 ph:// 资源标识符，也读不了相册容器里的原始路径 —— 直接喂给它就是黑屏。
  */
 export function AlbumPicker(): JSX.Element {
   const { width } = useWindowDimensions()
@@ -40,7 +51,10 @@ export function AlbumPicker(): JSX.Element {
   const [sel, setSel] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [resolving, setResolving] = useState(false)
+  const [progress, setProgress] = useState(0) // 已导入几个
+  const [failed, setFailed] = useState<string | null>(null)
   const [denied, setDenied] = useState(false)
+  const [limited, setLimited] = useState(false)
   const cursor = useRef<string | undefined>(undefined)
   const hasMore = useRef(true)
   const resolveRef = useRef<((v: PickedVideo[]) => void) | null>(null)
@@ -80,13 +94,16 @@ export function AlbumPicker(): JSX.Element {
       resolveRef.current = resolve
       setSel([])
       setDenied(false)
+      setFailed(null)
       setOpen(true)
       void (async () => {
-        const perm = await MediaLibrary.requestPermissionsAsync()
+        // 要完整访问：「选择照片」模式下 getAssetInfoAsync 常常给不出 localUri
+        const perm = await MediaLibrary.requestPermissionsAsync(false, ['photo', 'video'])
         if (!perm.granted) {
           setDenied(true)
           return
         }
+        setLimited(perm.accessPrivileges === 'limited')
         // 每次打开都重新拉第一页，免得漏掉刚拍的视频
         cursor.current = undefined
         hasMore.current = true
@@ -103,24 +120,51 @@ export function AlbumPicker(): JSX.Element {
   const confirm = async (): Promise<void> => {
     if (sel.length === 0) return finish([])
     setResolving(true)
+    setProgress(0)
+    setFailed(null)
     const out: PickedVideo[] = []
-    for (const id of sel) {
-      const a = assets.find((x) => x.id === id)
-      if (!a) continue
-      try {
-        // localUri 是相册里的原始文件（file://），不产生拷贝；
-        // iCloud 上的资源会在这一步按需下载，所以要给用户转圈提示
-        const info = await MediaLibrary.getAssetInfoAsync(id)
-        out.push({ uri: info.localUri || a.uri, duration: a.duration })
-      } catch (err) {
-        console.warn('取视频路径失败:', err)
+    try {
+      await FileSystem.makeDirectoryAsync(IMPORT_DIR, { intermediates: true }).catch(() => {})
+      for (const id of sel) {
+        const a = assets.find((x) => x.id === id)
+        if (!a) continue
+
+        // 缓存命中就直接用，省掉重复拷贝
+        const ext = (a.filename.split('.').pop() || 'mov').toLowerCase()
+        const dest = `${IMPORT_DIR}${safeName(a.filename.replace(/\.[^.]+$/, ''))}_${safeName(id).slice(-8)}.${ext}`
+        const hit = await FileSystem.getInfoAsync(dest)
+        if (hit.exists && hit.size > 0) {
+          out.push({ uri: dest, duration: a.duration })
+          setProgress(out.length)
+          continue
+        }
+
+        // localUri 才是能读的原始文件；拿不到就必须报错 ——
+        // 退回 a.uri（ph://）只会让播放器黑屏，比直接失败更难查
+        const info = await MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true })
+        const src = info.localUri
+        if (!src) {
+          throw new Error(`拿不到「${a.filename}」的文件路径。若相册权限是「选择照片」，请改成「允许完全访问」。`)
+        }
+        await FileSystem.copyAsync({ from: src, to: dest })
+        out.push({ uri: dest, duration: a.duration })
+        setProgress(out.length)
       }
+    } catch (err) {
+      // 出错就停在面板上把原因显示出来，而不是丢一个播不了的视频进时间线
+      setFailed(err instanceof Error ? err.message : String(err))
+      setResolving(false)
+      return
     }
     finish(out)
   }
 
+  // 关着就整个不挂：常驻的 RN Modal 在 iOS 上会带一个 UIViewController，
+  // 跟 App 的支持方向打架，转屏时来回抖（TitleSheet 一直是这么做的）
+  if (!open) return <></>
+
   return (
-    <Modal visible={open} animationType="slide" onRequestClose={() => finish([])}>
+    <Modal visible animationType="slide" onRequestClose={() => finish([])}>
       <View style={s.root}>
         <View style={s.bar}>
           <Pressable onPress={() => finish([])} hitSlop={10}>
@@ -133,6 +177,14 @@ export function AlbumPicker(): JSX.Element {
             </Text>
           </Pressable>
         </View>
+
+        {limited && (
+          <Pressable style={s.warn} onPress={() => void Linking.openSettings()}>
+            <Text style={s.warnText}>
+              当前是「选择照片」权限，部分视频会读不出来 · 点这里改成「完全访问」
+            </Text>
+          </Pressable>
+        )}
 
         {denied ? (
           <View style={s.center}>
@@ -178,8 +230,20 @@ export function AlbumPicker(): JSX.Element {
         {resolving && (
           <View style={s.overlay}>
             <ActivityIndicator color="#22d3ee" size="large" />
-            <Text style={s.overlayText}>正在准备 {sel.length} 个视频…</Text>
-            <Text style={s.overlaySub}>iCloud 上的视频需要先下载</Text>
+            <Text style={s.overlayText}>
+              正在导入 {Math.min(progress + 1, sel.length)} / {sel.length}
+            </Text>
+            <Text style={s.overlaySub}>只做拷贝不转码；iCloud 上的需要先下载</Text>
+          </View>
+        )}
+
+        {failed != null && (
+          <View style={s.overlay}>
+            <Text style={s.failTitle}>导入失败</Text>
+            <Text style={s.failMsg}>{failed}</Text>
+            <Pressable style={s.failBtn} onPress={() => setFailed(null)}>
+              <Text style={s.failBtnText}>知道了</Text>
+            </Pressable>
           </View>
         )}
       </View>
@@ -248,5 +312,25 @@ const s = StyleSheet.create({
     justifyContent: 'center'
   },
   overlayText: { color: '#e2e8f0', fontSize: 15, marginTop: 14 },
-  overlaySub: { color: '#64748b', fontSize: 12, marginTop: 6 }
+  overlaySub: { color: '#64748b', fontSize: 12, marginTop: 6 },
+
+  warn: { backgroundColor: 'rgba(180,83,9,0.35)', paddingHorizontal: 14, paddingVertical: 9 },
+  warnText: { color: '#fcd34d', fontSize: 12, lineHeight: 18 },
+
+  failTitle: { color: '#f87171', fontSize: 16, fontWeight: '500', marginBottom: 10 },
+  failMsg: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    paddingHorizontal: 28
+  },
+  failBtn: {
+    marginTop: 20,
+    backgroundColor: '#334155',
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 26
+  },
+  failBtnText: { color: '#e2e8f0', fontSize: 14 }
 })
