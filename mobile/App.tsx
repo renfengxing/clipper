@@ -30,6 +30,7 @@ import { SettingsSheet } from './src/components/SettingsSheet'
 import { ExportSheet } from './src/components/ExportSheet'
 import { Subtitle } from './src/components/Subtitle'
 import { RecentList } from './src/components/RecentList'
+import { EditClipSheet } from './src/components/EditClipSheet'
 
 /** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop 余量 */
 const LAND_BOTTOM_ZONE = 76
@@ -68,6 +69,7 @@ export default function App(): JSX.Element {
   const [reporting, setReporting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [exportMode, setExportMode] = useState<'export' | 'merge' | null>(null)
+  const [editClipId, setEditClipId] = useState<string | null>(null)
 
   // 片段/时间线自动落盘。此前手机端完全没有保存，退出即丢
   useEffect(() => startAutoSave(), [])
@@ -187,7 +189,8 @@ export default function App(): JSX.Element {
     onAiTag: () => void runAiTag(),
     onReport: () => void runReport(),
     onExport: () => setExportMode('export'),
-    onMerge: () => setExportMode('merge')
+    onMerge: () => setExportMode('merge'),
+    onEditClip: (id: string) => setEditClipId(id)
   }
 
   // 关闭整条时间线：从「视频」面板里提到左上角，一步可达
@@ -237,10 +240,7 @@ export default function App(): JSX.Element {
       }}
     />
   ) : (
-    <>
-      <Text style={s.hint}>还没有视频{'\n'}点「＋ 相册」开始</Text>
-      <RecentList />
-    </>
+    <Text style={s.hint}>还没有视频{'\n'}点「＋ 相册」开始</Text>
   )
 
   const playErrorOverlay = playError ? (
@@ -309,6 +309,7 @@ export default function App(): JSX.Element {
       <ReportSheet visible={reportOpen} onClose={() => setReportOpen(false)} />
       <SettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ExportSheet mode={exportMode} onClose={() => setExportMode(null)} />
+      <EditClipSheet clipId={editClipId} onClose={() => setEditClipId(null)} />
       {importOverlay}
     </>
   )
@@ -322,6 +323,7 @@ export default function App(): JSX.Element {
           <View style={s.landRow}>
             <VideoStage onFlick={onFlick} enabled={!!active} bottomInset={LAND_BOTTOM_ZONE}>
               {videoEl}
+              {!active && <RecentList floating />}
               <Subtitle />
               {markingOverlay}
               {playErrorOverlay}
@@ -406,7 +408,7 @@ export default function App(): JSX.Element {
           onTools={() => setSettingsOpen(true)}
         />
         {markButton(true)}
-        <ClipList {...clipListProps} />
+        {active ? <ClipList {...clipListProps} /> : <RecentList />}
       </SafeAreaView>
       {overlays}
     </View>

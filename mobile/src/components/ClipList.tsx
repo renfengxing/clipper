@@ -9,10 +9,17 @@ interface Props {
   onReport?: () => void
   onExport?: () => void
   onMerge?: () => void
+  onEditClip?: (id: string) => void
 }
 
 /** 片段列表：点击=循环播放该片段，长按=删除；多视频时标来源徽标 */
-export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): JSX.Element {
+export function ClipList({
+  onAiTag,
+  onReport,
+  onExport,
+  onMerge,
+  onEditClip
+}: Props = {}): JSX.Element {
   const clips = useStore((s) => s.clips)
   const videos = useStore((s) => s.videos)
   const selectedClipId = useStore((s) => s.selectedClipId)
@@ -48,10 +55,12 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
   const allVisibleChecked =
     visible.length > 0 && visible.every((c) => checkedIds.includes(c.id))
 
-  const confirmDelete = (id: string, title: string): void => {
-    Alert.alert('删除片段', title || '未命名片段', [
+  // 长按给出「编辑 / 删除」，比只能删好用
+  const onLongPressClip = (id: string, title: string): void => {
+    Alert.alert(title || '未命名片段', undefined, [
       { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: () => deleteClip(id) }
+      ...(onEditClip ? [{ text: '编辑文字和标签', onPress: () => onEditClip(id) }] : []),
+      { text: '删除', style: 'destructive' as const, onPress: () => deleteClip(id) }
     ])
   }
 
@@ -129,7 +138,7 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
             <Pressable
               key={c.id}
               onPress={() => selectClip(c.id)}
-              onLongPress={() => confirmDelete(c.id, c.title)}
+              onLongPress={() => onLongPressClip(c.id, c.title)}
               style={[s.row, c.id === selectedClipId && s.rowOn]}
             >
               {/* 勾选区单独吃点击，免得选中片段时又触发循环播放 */}

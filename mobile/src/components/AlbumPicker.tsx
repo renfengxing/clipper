@@ -17,8 +17,14 @@ import { registerPicker, type PickedVideo } from '../platform/pickerBridge'
 
 const PAGE = 90
 const GAP = 2
-/** 导入后的视频落地处。按相册资源 id 命名 → 同一场比赛再选一次直接命中，无需再拷 */
-const IMPORT_DIR = FileSystem.cacheDirectory + 'picked/'
+/**
+ * 导入后的视频落地处。按相册资源 id 命名 → 同一场比赛再选一次直接命中，无需再拷。
+ *
+ * 放 Documents 而不是 Caches：Caches 会被系统在存储紧张时清掉，
+ * 那样「最近打开」点进去就是一条视频全部失效的时间线（AVFoundation 报 -11800）。
+ * 代价是这些副本会占用用户存储，可在「视频」面板里移除。
+ */
+const IMPORT_DIR = FileSystem.documentDirectory + 'imported/'
 
 function safeName(s: string): string {
   return s.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-40)
