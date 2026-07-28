@@ -26,14 +26,18 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const selectClip = useStore((s) => s.selectClip)
   const activeVideoId = useStore((s) => s.activeVideoId)
   const removeVideo = useStore((s) => s.removeVideo)
+  const pause = useStore((s) => s.pause)
+  const resume = useStore((s) => s.resume)
 
   const [width, setWidth] = useState(0)
   const widthRef = useRef(0)
   const total = totalDuration(videos)
 
   // PanResponder 只创建一次，用 ref 读取每次渲染的最新值
-  const ref = useRef({ total, clips, videos, seek, clearPreview, selectClip })
-  ref.current = { total, clips, videos, seek, clearPreview, selectClip }
+  const ref = useRef({ total, clips, videos, seek, clearPreview, selectClip, pause, resume })
+  ref.current = { total, clips, videos, seek, clearPreview, selectClip, pause, resume }
+  /** 按下时是否在播 —— 拖完用它决定要不要续播 */
+  const wasPlayingRef = useRef(false)
 
   const onLayout = (e: LayoutChangeEvent): void => {
     const w = e.nativeEvent.layout.width
@@ -69,6 +73,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       onPanResponderGrant: (e) => {
         const t = timeAtX(e.nativeEvent.locationX)
         movedRef.current = false
+        wasPlayingRef.current = useStore.getState().playing
         hitClipRef.current = t == null ? null : clipAt(t)
         // 按在片段上：先不动，等松手判定为「点击片段」；按在空白处：立刻 scrub
         if (hitClipRef.current == null && t != null) {
@@ -79,6 +84,11 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       onPanResponderMove: (e, g) => {
         // 手指落下时必然带几像素抖动，没有阈值的话「点片段」永远会被判成拖拽
         if (!movedRef.current && Math.abs(g.dx) <= DRAG_PX) return
+        if (!movedRef.current) {
+          // 确认是拖拽 → 先把播放停住。否则正放时播放器继续推进、
+          // 倒放时 reverseTick 的 rAF 还在跑，都会和 scrub 抢着写 currentTime
+          if (wasPlayingRef.current) ref.current.pause()
+        }
         movedRef.current = true
         hitClipRef.current = null // 确认是拖拽，不再算点击片段
         const t = timeAtX(e.nativeEvent.locationX)
@@ -91,6 +101,9 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         // 点在片段上且没拖动 → 从片段起点循环播放（与列表点击一致）
         if (!movedRef.current && hitClipRef.current) {
           ref.current.selectClip(hitClipRef.current)
+        } else if (movedRef.current && wasPlayingRef.current) {
+          // 拖完续播，按拖之前的方向和倍率
+          ref.current.resume()
         }
         hitClipRef.current = null
       },

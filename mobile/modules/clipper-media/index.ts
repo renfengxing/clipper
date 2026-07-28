@@ -16,6 +16,8 @@ export interface ProgressEvent {
 }
 
 interface ClipperMediaNative {
+  /** 底边系统手势延后生效（横屏拖底部进度条时不误切 app） */
+  setDeferBottomGesture(on: boolean): void
   exportClips(options: {
     albumName: string
     clips: ClipInput[]

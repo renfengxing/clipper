@@ -52,6 +52,20 @@ public class ClipperMediaModule: Module {
 
     Events("onProgress")
 
+    OnCreate {
+      DispatchQueue.main.async {
+        EdgeGestureGuard.install()
+      }
+    }
+
+    /** 底边系统手势延后生效：拖底部的进度条时不会误切到别的 app */
+    Function("setDeferBottomGesture") { (on: Bool) in
+      DispatchQueue.main.async {
+        EdgeGestureGuard.enabled = on
+        EdgeGestureGuard.refresh()
+      }
+    }
+
     AsyncFunction("exportClips") { (options: ExportOptions) -> [String: Any] in
       try await self.requirePhotoPermission()
       var outputs: [String] = []

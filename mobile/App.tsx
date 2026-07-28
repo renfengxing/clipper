@@ -14,6 +14,7 @@ import { Video, ResizeMode } from 'expo-av'
 import { useStore, selectActiveVideo } from '@core/store/useStore'
 import { platform } from '@core/ports'
 import { startAutoSave } from '@core/persist/autoSave'
+import { ClipperMedia } from './modules/clipper-media'
 import { fmtClock, fmtMs } from '@core/utils/time'
 import { totalDuration } from '@core/utils/timeline'
 import { TitleSheet } from './src/components/TitleSheet'
@@ -66,6 +67,11 @@ export default function App(): JSX.Element {
 
   // 片段/时间线自动落盘。此前手机端完全没有保存，退出即丢
   useEffect(() => startAutoSave(), [])
+
+  // 横屏时进度条贴着底边，和 iOS 的切换 app 手势重合 —— 让底边手势延后生效
+  useEffect(() => {
+    ClipperMedia.setDeferBottomGesture(landscape)
+  }, [landscape])
 
   useEffect(() => {
     platform()
