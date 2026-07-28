@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native'
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  useWindowDimensions
+} from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -102,7 +109,11 @@ export default function App(): JSX.Element {
       // 关键：定位与播放合并成一次 setStatusAsync，杜绝「先播后定位」的竞态
       play: () => {
         const s = takePending()
-        push(s != null ? { positionMillis: Math.round(s * 1000), shouldPlay: true } : { shouldPlay: true })
+        push(
+          s != null
+            ? { positionMillis: Math.round(s * 1000), shouldPlay: true }
+            : { shouldPlay: true }
+        )
       },
       pause: () => {
         takePending()
@@ -213,91 +224,100 @@ export default function App(): JSX.Element {
     </View>
   )
 
+  // 转屏时横竖两棵树会整体替换。把浮层抽出来放在同一个位置上，
+  // React 才会复用而不是卸载重建 —— 否则相册选择器一转屏就丢状态、自动关闭
+  const overlays = (
+    <>
+      <TitleSheet />
+      <AlbumPicker />
+      <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
+      {importOverlay}
+    </>
+  )
+
   // ——— 横屏：视频铺满，控件半透明浮在画面上，片段列表在右侧可折叠（对齐 PC 版）———
   if (landscape) {
     return (
-      <SafeAreaView style={s.root} edges={['top', 'bottom', 'left', 'right']}>
-        <StatusBar style="light" hidden />
-        <View style={s.landRow}>
-          <VideoStage onFlick={onFlick} enabled={!!active}>
-            {videoEl}
-            {markingOverlay}
-            {playErrorOverlay}
+      <View style={s.root}>
+        <SafeAreaView style={s.root} edges={['top', 'bottom', 'left', 'right']}>
+          <StatusBar style="light" hidden />
+          <View style={s.landRow}>
+            <VideoStage onFlick={onFlick} enabled={!!active}>
+              {videoEl}
+              {markingOverlay}
+              {playErrorOverlay}
 
-            <View style={s.landTopBar} pointerEvents="box-none">
-              <View style={s.pill} pointerEvents="none">
-                {statusText}
+              <View style={s.landTopBar} pointerEvents="box-none">
+                <View style={s.pill} pointerEvents="none">
+                  {statusText}
+                </View>
+                {/* 片段列表开关：做成浮动按钮，比屏幕边缘的细条好找得多 */}
+                <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
+                  <Text style={s.listToggleText}>
+                    {listOpen ? '片段 ▶' : `☰ 片段 ${clips.length}`}
+                  </Text>
+                </Pressable>
               </View>
-              {/* 片段列表开关：做成浮动按钮，比屏幕边缘的细条好找得多 */}
-              <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
-                <Text style={s.listToggleText}>
-                  {listOpen ? '片段 ▶' : `☰ 片段 ${clips.length}`}
-                </Text>
-              </Pressable>
-            </View>
 
-            {/* 标记按钮：独立浮在右侧，避免被控制条挤掉；两手握持时右拇指可及 */}
-            <View style={s.landMark}>{markButton()}</View>
+              {/* 标记按钮：独立浮在右侧，避免被控制条挤掉；两手握持时右拇指可及 */}
+              <View style={s.landMark}>{markButton()}</View>
 
-            <View style={s.landBottom}>
-              <Timeline floating />
-              <Controls
-                floating
-                videoCount={videos.length}
-                onPickVideos={() => void chooseAndAddVideos()}
-                onManageVideos={() => setVideoSheetOpen(true)}
-              />
-            </View>
-          </VideoStage>
+              <View style={s.landBottom}>
+                <Timeline floating />
+                <Controls
+                  floating
+                  videoCount={videos.length}
+                  onPickVideos={() => void chooseAndAddVideos()}
+                  onManageVideos={() => setVideoSheetOpen(true)}
+                />
+              </View>
+            </VideoStage>
 
-          {listOpen ? (
-            <View style={s.landList}>
-              <Pressable style={s.collapseBar} onPress={() => setListOpen(false)}>
-                <Text style={s.collapseText}>片段 {clips.length}</Text>
-                <Text style={s.collapseAction}>收起 ▶</Text>
-              </Pressable>
-              <ClipList />
-            </View>
-          ) : null}
-        </View>
-        <TitleSheet />
-        <AlbumPicker />
-        <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
-        {importOverlay}
-      </SafeAreaView>
+            {listOpen ? (
+              <View style={s.landList}>
+                <Pressable style={s.collapseBar} onPress={() => setListOpen(false)}>
+                  <Text style={s.collapseText}>片段 {clips.length}</Text>
+                  <Text style={s.collapseAction}>收起 ▶</Text>
+                </Pressable>
+                <ClipList />
+              </View>
+            ) : null}
+          </View>
+        </SafeAreaView>
+        {overlays}
+      </View>
     )
   }
 
   // ——— 竖屏：上下堆叠，适合单手快速标记 ———
   return (
-    <SafeAreaView style={s.root}>
-      <StatusBar style="light" hidden />
-      <View style={s.portVideo}>
-        <VideoStage onFlick={onFlick} enabled={!!active}>
-          {videoEl}
-          {markingOverlay}
-          {playErrorOverlay}
-        </VideoStage>
-      </View>
-      <View style={s.infoRow}>
-        {statusText}
-        <Text style={s.meta}>
-          {videos.length} 个视频 · {clips.length} 个片段
-        </Text>
-      </View>
-      <Timeline />
-      <Controls
-        videoCount={videos.length}
-        onPickVideos={() => void chooseAndAddVideos()}
-        onManageVideos={() => setVideoSheetOpen(true)}
-      />
-      {markButton(true)}
-      <ClipList />
-      <TitleSheet />
-      <AlbumPicker />
-      <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
-      {importOverlay}
-    </SafeAreaView>
+    <View style={s.root}>
+      <SafeAreaView style={s.root}>
+        <StatusBar style="light" hidden />
+        <View style={s.portVideo}>
+          <VideoStage onFlick={onFlick} enabled={!!active}>
+            {videoEl}
+            {markingOverlay}
+            {playErrorOverlay}
+          </VideoStage>
+        </View>
+        <View style={s.infoRow}>
+          {statusText}
+          <Text style={s.meta}>
+            {videos.length} 个视频 · {clips.length} 个片段
+          </Text>
+        </View>
+        <Timeline />
+        <Controls
+          videoCount={videos.length}
+          onPickVideos={() => void chooseAndAddVideos()}
+          onManageVideos={() => setVideoSheetOpen(true)}
+        />
+        {markButton(true)}
+        <ClipList />
+      </SafeAreaView>
+      {overlays}
+    </View>
   )
 }
 
@@ -307,7 +327,12 @@ const s = StyleSheet.create({
 
   // 横屏
   landRow: { flex: 1, flexDirection: 'row' },
-  landVideo: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  landVideo: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
   landTopBar: {
     position: 'absolute',
     top: 8,
@@ -325,7 +350,12 @@ const s = StyleSheet.create({
   landBottom: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // 标记按钮浮在视频区右侧、时间线之上
   landMark: { position: 'absolute', right: 10, bottom: 96 },
-  landList: { width: 300, backgroundColor: '#0f172a', borderLeftWidth: 0.5, borderLeftColor: '#1e293b' },
+  landList: {
+    width: 300,
+    backgroundColor: '#0f172a',
+    borderLeftWidth: 0.5,
+    borderLeftColor: '#1e293b'
+  },
   collapseBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -348,7 +378,12 @@ const s = StyleSheet.create({
   listToggleText: { color: '#fff', fontSize: 13, fontWeight: '500' },
 
   // 竖屏
-  portVideo: { height: 210, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  portVideo: {
+    height: 210,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -360,11 +395,25 @@ const s = StyleSheet.create({
   meta: { color: '#94a3b8', fontSize: 11 },
 
   markOverlay: { position: 'absolute', alignItems: 'center' },
-  markTitle: { color: 'rgba(255,255,255,0.6)', fontSize: 19, fontWeight: '500' },
+  markTitle: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 19,
+    fontWeight: '500'
+  },
   markSub: { color: 'rgba(255,255,255,0.45)', fontSize: 14, marginTop: 4 },
 
-  markRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 6 },
-  markBtn: { borderRadius: 12, paddingVertical: 13, paddingHorizontal: 22, alignItems: 'center' },
+  markRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 6
+  },
+  markBtn: {
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 22,
+    alignItems: 'center'
+  },
   markBtnBig: { flex: 1, paddingVertical: 17 },
   markBtnStart: { backgroundColor: 'rgba(8,145,178,0.85)' },
   markBtnEnd: { backgroundColor: 'rgba(220,38,38,0.85)' },
@@ -398,5 +447,10 @@ const s = StyleSheet.create({
     padding: 14
   },
   playErrorTitle: { color: '#fecaca', fontSize: 15, fontWeight: '500' },
-  playErrorMsg: { color: 'rgba(254,226,226,0.8)', fontSize: 11, marginTop: 7, textAlign: 'center' }
+  playErrorMsg: {
+    color: 'rgba(254,226,226,0.8)',
+    fontSize: 11,
+    marginTop: 7,
+    textAlign: 'center'
+  }
 })

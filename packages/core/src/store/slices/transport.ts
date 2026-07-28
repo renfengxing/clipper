@@ -90,8 +90,11 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
     },
 
     syncLocalTime: (local) => {
-      const { videos, activeVideoId, previewEnd, previewStart, previewEntered } = get()
+      const { videos, activeVideoId, previewEnd, previewStart, previewEntered, direction } = get()
       if (!activeVideoId) return
+      // 倒放期间 currentTime 归 reverseTick 独占：播放器汇报的是我们刚 seek 过去的旧位置，
+      // 让它也写 currentTime 就成了两个写入源互相覆盖 —— 表现为进度一前一后来回拉扯
+      if (direction === 'reverse') return
       const T = videoOffset(videos, activeVideoId) + local
 
       if (previewEnd != null) {

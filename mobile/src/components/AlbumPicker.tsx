@@ -164,7 +164,13 @@ export function AlbumPicker(): JSX.Element {
   if (!open) return <></>
 
   return (
-    <Modal visible animationType="slide" onRequestClose={() => finish([])}>
+    <Modal
+      visible
+      animationType="slide"
+      // 不写这个，iOS 上 Modal 只支持竖屏：横屏点开会强行竖过来
+      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
+      onRequestClose={() => finish([])}
+    >
       <View style={s.root}>
         <View style={s.bar}>
           <Pressable onPress={() => finish([])} hitSlop={10}>

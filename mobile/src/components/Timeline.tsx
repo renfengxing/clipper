@@ -11,6 +11,9 @@ interface TimelineProps {
   floating?: boolean
 }
 
+/** 超过这个位移才算拖拽，否则按「点击」处理 */
+const DRAG_PX = 6
+
 export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const videos = useStore((s) => s.videos)
   const clips = useStore((s) => s.clips)
@@ -73,9 +76,11 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           ref.current.seek(t)
         }
       },
-      onPanResponderMove: (e) => {
+      onPanResponderMove: (e, g) => {
+        // 手指落下时必然带几像素抖动，没有阈值的话「点片段」永远会被判成拖拽
+        if (!movedRef.current && Math.abs(g.dx) <= DRAG_PX) return
         movedRef.current = true
-        hitClipRef.current = null // 变成拖拽，不再算点击片段
+        hitClipRef.current = null // 确认是拖拽，不再算点击片段
         const t = timeAtX(e.nativeEvent.locationX)
         if (t != null) {
           ref.current.clearPreview()

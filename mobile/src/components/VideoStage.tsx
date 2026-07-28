@@ -162,7 +162,10 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
 
       {/* 调速条：按住横滑时弹出，左右方向对应两套倍率 */}
       {pick != null && (
-        <View style={s.rateWrap} pointerEvents="none">
+        <View
+          style={[s.rateWrap, pick.dir === 'rev' ? s.rateWrapLeft : s.rateWrapRight]}
+          pointerEvents="none"
+        >
           <View style={s.rateBar}>
             {rateList.map((v, i) => (
               <View key={v} style={[s.rateItem, i === pick.idx && s.rateItemOn]}>
@@ -203,7 +206,10 @@ const s = StyleSheet.create({
     justifyContent: 'center'
   },
   centerIcon: { color: 'rgba(255,255,255,0.85)', fontSize: 24 },
+  // 倍率条跟着滑动方向走：右滑贴右侧、左滑贴左侧，手指落点和视线落点一致
   rateWrap: { position: 'absolute', alignItems: 'center' },
+  rateWrapLeft: { left: 16 },
+  rateWrapRight: { right: 16 },
   rateBar: {
     flexDirection: 'row',
     gap: 4,
