@@ -3,8 +3,16 @@ import { useStore } from '@core/store/useStore'
 import { fmtClock } from '@core/utils/time'
 import { ordered, clipGlobalIn } from '@core/utils/timeline'
 
+interface Props {
+  /** 片段相关的工具（AI 标签 / 报告 / 导出 / 合并）都挂在列表上，随片段走 */
+  onAiTag?: () => void
+  onReport?: () => void
+  onExport?: () => void
+  onMerge?: () => void
+}
+
 /** 片段列表：点击=循环播放该片段，长按=删除；多视频时标来源徽标 */
-export function ClipList(): JSX.Element {
+export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): JSX.Element {
   const clips = useStore((s) => s.clips)
   const videos = useStore((s) => s.videos)
   const selectedClipId = useStore((s) => s.selectedClipId)
@@ -14,6 +22,7 @@ export function ClipList(): JSX.Element {
   const toggleActiveTag = useStore((s) => s.toggleActiveTag)
   const clearActiveTags = useStore((s) => s.clearActiveTags)
   const tagFilterMode = useStore((s) => s.tagFilterMode)
+  const aiTagging = useStore((s) => s.aiTagging)
 
   const idx: Record<string, number> = {}
   ordered(videos).forEach((v, i) => (idx[v.id] = i + 1))
@@ -36,8 +45,27 @@ export function ClipList(): JSX.Element {
     ])
   }
 
+  const tool = (label: string, onPress?: () => void, busy?: boolean): JSX.Element => (
+    <Pressable
+      style={[s.tool, (!onPress || busy) && s.toolOff]}
+      onPress={onPress}
+      disabled={!onPress || busy || clips.length === 0}
+    >
+      <Text style={s.toolText}>{busy ? '…' : label}</Text>
+    </Pressable>
+  )
+
   return (
     <View style={s.wrap}>
+      {(onAiTag || onReport || onExport || onMerge) && (
+        <View style={s.toolRow}>
+          {tool('🏷 标签', onAiTag, aiTagging)}
+          {tool('📋 报告', onReport)}
+          {tool('📤 导出', onExport)}
+          {tool('🎬 合并', onMerge)}
+        </View>
+      )}
+
       {usedTags.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterRow}>
           <Pressable
@@ -104,6 +132,23 @@ export function ClipList(): JSX.Element {
 }
 
 const s = StyleSheet.create({
+  toolRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 2
+  },
+  tool: {
+    flex: 1,
+    backgroundColor: '#1e293b',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center'
+  },
+  toolOff: { opacity: 0.4 },
+  toolText: { color: '#cbd5e1', fontSize: 11 },
+
   wrap: { flex: 1, borderTopWidth: 0.5, borderTopColor: '#1e293b' },
   filterRow: { flexGrow: 0, paddingHorizontal: 10, paddingVertical: 8 },
   filterChip: { backgroundColor: '#334155', borderRadius: 12, paddingVertical: 5, paddingHorizontal: 11, marginRight: 6 },

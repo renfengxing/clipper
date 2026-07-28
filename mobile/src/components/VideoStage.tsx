@@ -23,6 +23,7 @@ const DEAD_PX = 14 // 死区：按住但几乎没动 → 不选任何档
 const HOLD_MS = 220 // 按住多久进入调速模式
 const FLICK_PX = 60 // 快速滑动的最小位移
 const FLICK_V = 0.5 // 快速滑动的最小速度
+const VERTICAL_CANCEL_PX = 12 // 竖向位移超过这个值就不再当作调速手势
 const BTN_HOLD_MS = 1400 // 播放/暂停按钮停留多久后淡出
 
 type Dir = 'fwd' | 'rev'
@@ -138,6 +139,7 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
         if (!cbRef.current.enabled) return
         holdRef.current = false
         movedRef.current = false
+        if (pickRef.current) setPickBoth(null) // 清掉上一次被系统截断留下的残留
         // 按住一小会儿 → 进入调速模式（与「快速滑动」区分开）
         clearTimer()
         const at = localPoint(e)
@@ -155,8 +157,9 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
         if (!cbRef.current.enabled) return
         if (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4) movedRef.current = true
         if (!holdRef.current) {
-          // 还没进入调速模式：一旦快速滑走就取消 hold 计时（判为快速滑动）
-          if (Math.abs(g.vx) > FLICK_V) clearTimer()
+          // 还没进入调速模式：快速横滑判为「收展列表」，明显竖滑判为系统手势/误触，
+          // 两种都要取消 hold 计时。少了竖向这一条，从底边上滑就会弹出倍率条
+          if (Math.abs(g.vx) > FLICK_V || Math.abs(g.dy) > VERTICAL_CANCEL_PX) clearTimer()
           return
         }
         // 调速模式：滑动方向决定用哪条倍率梯，位移决定停在哪一档。
@@ -177,6 +180,8 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
       },
       onPanResponderRelease: (_e, g) => {
         clearTimer()
+        const hadPick = pickRef.current != null
+        setPickBoth(null) // 任何情况下都收起，不能只在 holdRef 为真时收
         if (!cbRef.current.enabled) return
         if (holdRef.current) {
           const p = pickRef.current
@@ -187,9 +192,10 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
             cbRef.current.resume()
           }
           holdRef.current = false
-          setPickBoth(null)
           return
         }
+        // 倍率条还开着但没进调速模式（被系统手势打断过）→ 这一下只用来关掉它
+        if (hadPick) return
         // 快速横滑 → 收起/展开列表
         if (Math.abs(g.dx) > FLICK_PX && Math.abs(g.vx) > FLICK_V) {
           cbRef.current.onFlick(g.dx > 0 ? 'right' : 'left')
@@ -203,7 +209,9 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
         if (holdRef.current && wasPlayingRef.current) cbRef.current.resume()
         holdRef.current = false
         setPickBoth(null)
-      }
+      },
+      // 系统手势（底边上滑等）随时可能接管，别赖着不放，否则残留状态清不掉
+      onPanResponderTerminationRequest: () => true
     })
   ).current
 

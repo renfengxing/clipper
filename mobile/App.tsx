@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Alert,
   View,
   Text,
   Pressable,
@@ -24,7 +25,7 @@ import { Controls } from './src/components/Controls'
 import { VideoStage } from './src/components/VideoStage'
 import { AlbumPicker } from './src/components/AlbumPicker'
 import { VideoSheet } from './src/components/VideoSheet'
-import { ToolsSheet } from './src/components/ToolsSheet'
+import { ReportSheet } from './src/components/ReportSheet'
 import { SettingsSheet } from './src/components/SettingsSheet'
 import { ExportSheet } from './src/components/ExportSheet'
 
@@ -61,7 +62,8 @@ export default function App(): JSX.Element {
   const [playError, setPlayError] = useState<string | null>(null)
   const [listOpen, setListOpen] = useState(false) // 默认收起，全屏看画面（#4）
   const [videoSheetOpen, setVideoSheetOpen] = useState(false)
-  const [toolsOpen, setToolsOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reporting, setReporting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [exportMode, setExportMode] = useState<'export' | 'merge' | null>(null)
 
@@ -150,6 +152,54 @@ export default function App(): JSX.Element {
       setPlayer(null)
     }
   }, [ready, setPlayer, applyPendingSeek])
+
+  const noKeyHint = (): void =>
+    Alert.alert('还没填 DeepSeek API Key', '到「设置」里填上就能用 AI 打标签和比赛报告。', [
+      { text: '知道了', style: 'cancel' },
+      { text: '去设置', onPress: () => setSettingsOpen(true) }
+    ])
+
+  const runAiTag = async (): Promise<void> => {
+    const res = await useStore.getState().aiAutoTag()
+    if (res.ok) Alert.alert('打标签完成', `已为 ${clips.length} 个片段补上标签。`)
+    else if (res.code === 'NO_KEY') noKeyHint()
+    else Alert.alert('打标签失败', res.error || '未知错误')
+  }
+
+  const runReport = async (): Promise<void> => {
+    if (reporting) return
+    setReporting(true)
+    try {
+      const res = await platform().report(useStore.getState().clips)
+      if (res.ok && res.report) {
+        useStore.getState().setReport(res.report)
+        setReportOpen(true)
+      } else if (res.code === 'NO_KEY') noKeyHint()
+      else Alert.alert('生成报告失败', res.error || '未知错误')
+    } finally {
+      setReporting(false)
+    }
+  }
+
+  const clipListProps = {
+    onAiTag: () => void runAiTag(),
+    onReport: () => void runReport(),
+    onExport: () => setExportMode('export'),
+    onMerge: () => setExportMode('merge')
+  }
+
+  // 关闭整条时间线：从「视频」面板里提到左上角，一步可达
+  const onCloseTimeline = (): void =>
+    Alert.alert('关闭当前视频', '回到空白状态去标下一场。片段都已保存，不会丢。', [
+      { text: '取消', style: 'cancel' },
+      { text: '关闭', style: 'destructive', onPress: () => useStore.getState().closeVideo() }
+    ])
+
+  const closeButton = active ? (
+    <Pressable style={s.closeVideoBtn} onPress={onCloseTimeline} hitSlop={8}>
+      <Text style={s.closeVideoText}>✕</Text>
+    </Pressable>
+  ) : null
 
   const total = totalDuration(videos)
   const marking = markIn != null && markOut == null
@@ -251,13 +301,7 @@ export default function App(): JSX.Element {
       <TitleSheet />
       <AlbumPicker />
       <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
-      <ToolsSheet
-        visible={toolsOpen}
-        onClose={() => setToolsOpen(false)}
-        onExport={() => setExportMode('export')}
-        onMerge={() => setExportMode('merge')}
-        onSettings={() => setSettingsOpen(true)}
-      />
+      <ReportSheet visible={reportOpen} onClose={() => setReportOpen(false)} />
       <SettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ExportSheet mode={exportMode} onClose={() => setExportMode(null)} />
       {importOverlay}
@@ -277,8 +321,11 @@ export default function App(): JSX.Element {
               {playErrorOverlay}
 
               <View style={s.landTopBar} pointerEvents="box-none">
-                <View style={s.pill} pointerEvents="none">
-                  {statusText}
+                <View style={s.landTopLeft}>
+                  {closeButton}
+                  <View style={s.pill} pointerEvents="none">
+                    {statusText}
+                  </View>
                 </View>
                 {/* 相册/视频/片段都收进顶栏：底部只留细进度条，把高度还给画面 */}
                 <View style={s.landTopBtns}>
@@ -288,7 +335,7 @@ export default function App(): JSX.Element {
                     videoCount={videos.length}
                     onPickVideos={() => void chooseAndAddVideos()}
                     onManageVideos={() => setVideoSheetOpen(true)}
-                    onTools={() => setToolsOpen(true)}
+                    onTools={() => setSettingsOpen(true)}
                   />
                   <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
                     <Text style={s.listToggleText}>
@@ -312,7 +359,7 @@ export default function App(): JSX.Element {
                   <Text style={s.collapseText}>片段 {clips.length}</Text>
                   <Text style={s.collapseAction}>收起 ▶</Text>
                 </Pressable>
-                <ClipList />
+                <ClipList {...clipListProps} />
               </View>
             ) : null}
           </View>
@@ -335,7 +382,10 @@ export default function App(): JSX.Element {
           </VideoStage>
         </View>
         <View style={s.infoRow}>
-          {statusText}
+          <View style={s.landTopLeft}>
+            {closeButton}
+            {statusText}
+          </View>
           <Text style={s.meta}>
             {videos.length} 个视频 · {clips.length} 个片段
           </Text>
@@ -345,10 +395,10 @@ export default function App(): JSX.Element {
           videoCount={videos.length}
           onPickVideos={() => void chooseAndAddVideos()}
           onManageVideos={() => setVideoSheetOpen(true)}
-          onTools={() => setToolsOpen(true)}
+          onTools={() => setSettingsOpen(true)}
         />
         {markButton(true)}
-        <ClipList />
+        <ClipList {...clipListProps} />
       </SafeAreaView>
       {overlays}
     </View>
@@ -385,6 +435,18 @@ const s = StyleSheet.create({
   // 抬离屏幕底边：太靠下会撞上 iOS 的上滑手势区，一拖就切到别的 app
   landBottom: { position: 'absolute', left: 0, right: 0, bottom: 22 },
   landTopBtns: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  landTopLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  closeVideoBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15,23,42,0.6)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(148,163,184,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  closeVideoText: { color: '#e2e8f0', fontSize: 14, lineHeight: 16 },
   // 标记按钮浮在视频区右侧、时间线之上（底部只剩细进度条了，可以压低）
   landMark: { position: 'absolute', right: 10, bottom: 44 },
   landList: {
