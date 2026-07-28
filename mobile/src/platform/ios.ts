@@ -1,11 +1,8 @@
 import * as FileSystem from 'expo-file-system'
-import * as ImagePicker from 'expo-image-picker'
 import type { Platform, Settings } from '@core/ports'
+import { requestPickVideos } from './pickerBridge'
 
-/**
- * 选片时缓存元数据：ImagePicker 直接给了 uri 和时长，
- * 不必再走 MediaLibrary（那需要另一套权限，且相册资源 id 不能直接喂播放器）。
- */
+/** 选片时相册已给出时长，缓存下来省一次探测（fps 拿不到，先按 30 兜底） */
 const metaCache = new Map<string, { duration: number; fps: number }>()
 
 /**
@@ -79,20 +76,16 @@ export const iosPlatform: Platform = {
     return cached ?? { duration: 0, fps: 30 }
   },
 
+  /**
+   * 走自建的 AlbumPicker（见 components/AlbumPicker.tsx）。
+   * 拿到的是相册原始文件的 file:// 路径 —— 不拷贝、不转码，所以是秒开。
+   */
   async pickVideos() {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!perm.granted) return []
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsMultipleSelection: true,
-        quality: 1
-      })
-      if (res.canceled) return []
-      return res.assets.map((a) => {
-        // uri 是 app 沙盒里的 file://，可直接喂 expo-av，也能当稳定 key
-        metaCache.set(a.uri, { duration: (a.duration ?? 0) / 1000, fps: 30 })
-        return a.uri
+      const picked = await requestPickVideos()
+      return picked.map((p) => {
+        metaCache.set(p.uri, { duration: p.duration, fps: 30 })
+        return p.uri
       })
     } catch (err) {
       console.warn('选择视频失败:', err)

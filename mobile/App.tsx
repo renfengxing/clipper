@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native'
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
@@ -13,6 +13,8 @@ import { Timeline } from './src/components/Timeline'
 import { ClipList } from './src/components/ClipList'
 import { Controls } from './src/components/Controls'
 import { VideoStage } from './src/components/VideoStage'
+import { AlbumPicker } from './src/components/AlbumPicker'
+import { VideoSheet } from './src/components/VideoSheet'
 
 export default function App(): JSX.Element {
   const { width, height } = useWindowDimensions()
@@ -27,6 +29,7 @@ export default function App(): JSX.Element {
   const direction = useStore((s) => s.direction)
   const markIn = useStore((s) => s.markIn)
   const markOut = useStore((s) => s.markOut)
+  const importing = useStore((s) => s.importing)
 
   const chooseAndAddVideos = useStore((s) => s.chooseAndAddVideos)
   const setPlayer = useStore((s) => s.setPlayer)
@@ -41,6 +44,7 @@ export default function App(): JSX.Element {
   const videoRef = useRef<Video>(null)
   const [ready, setReady] = useState(false)
   const [listOpen, setListOpen] = useState(false) // 默认收起，全屏看画面（#4）
+  const [videoSheetOpen, setVideoSheetOpen] = useState(false)
 
   useEffect(() => {
     platform()
@@ -154,6 +158,14 @@ export default function App(): JSX.Element {
     </View>
   ) : null
 
+  // 选完片到时间线就绪之间会有一小段空档，给个明确反馈，别让人以为没选上
+  const importOverlay = importing ? (
+    <View style={s.importOverlay}>
+      <ActivityIndicator color="#22d3ee" size="large" />
+      <Text style={s.importText}>正在载入视频…</Text>
+    </View>
+  ) : null
+
   const statusText = (
     <Text style={s.time}>
       {fmtMs(currentTime)} / {fmtClock(total)}
@@ -212,7 +224,12 @@ export default function App(): JSX.Element {
 
             <View style={s.landBottom}>
               <Timeline floating />
-              <Controls floating onPickVideos={() => void chooseAndAddVideos()} />
+              <Controls
+                floating
+                videoCount={videos.length}
+                onPickVideos={() => void chooseAndAddVideos()}
+                onManageVideos={() => setVideoSheetOpen(true)}
+              />
             </View>
           </VideoStage>
 
@@ -227,6 +244,9 @@ export default function App(): JSX.Element {
           ) : null}
         </View>
         <TitleSheet />
+        <AlbumPicker />
+        <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
+        {importOverlay}
       </SafeAreaView>
     )
   }
@@ -248,10 +268,17 @@ export default function App(): JSX.Element {
         </Text>
       </View>
       <Timeline />
-      <Controls onPickVideos={() => void chooseAndAddVideos()} />
+      <Controls
+        videoCount={videos.length}
+        onPickVideos={() => void chooseAndAddVideos()}
+        onManageVideos={() => setVideoSheetOpen(true)}
+      />
       {markButton(true)}
       <ClipList />
       <TitleSheet />
+      <AlbumPicker />
+      <VideoSheet visible={videoSheetOpen} onClose={() => setVideoSheetOpen(false)} />
+      {importOverlay}
     </SafeAreaView>
   )
 }
@@ -333,5 +360,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     justifyContent: 'center'
   },
-  cancelText: { color: '#cbd5e1', fontSize: 14 }
+  cancelText: { color: '#cbd5e1', fontSize: 14 },
+
+  importOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(2,6,23,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  importText: { color: '#e2e8f0', fontSize: 15, marginTop: 14 }
 })

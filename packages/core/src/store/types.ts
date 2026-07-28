@@ -9,6 +9,7 @@ export interface VideoSlice {
   activeVideoId: string | null // <video> 当前加载的视频
   timelineName: string
   timelinePath: string | null // .kkclip 文件路径（首次保存前为预定路径）
+  importing: boolean // 正在探测/载入新加的视频（手机端据此显示转圈）
   addVideosFromPaths: (paths: string[]) => Promise<void> // 探测并追加
   chooseAndAddVideos: () => Promise<void> // 弹框多选添加
   removeVideo: (id: string) => void

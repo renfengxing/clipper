@@ -95,38 +95,44 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
     activeVideoId: null,
     timelineName: '',
     timelinePath: null,
+    importing: false,
 
     addVideosFromPaths: async (paths) => {
       if (paths.length === 0) return
-      const cur = get().videos
-      const added = await Promise.all(paths.map((p, i) => probeToSource(p, cur.length + i)))
-      const sidecars = await Promise.all(added.map(loadSidecar))
-      const videos = [...cur, ...added]
-      const newClips: Clip[] = []
-      const tagSet = new Set(get().videoTags)
-      sidecars.forEach((r) => {
-        r.clips.forEach((c) => newClips.push(c))
-        r.tags.forEach((t) => tagSet.add(t))
-      })
-      const clips = [...get().clips, ...newClips].map((c, i) => ({ ...c, order: i }))
-      const patch: Partial<AppState> = { videos, clips, videoTags: Array.from(tagSet) }
-      if (get().activeVideoId == null && added[0]) {
-        patch.activeVideoId = added[0].id
-        patch.pendingSeekLocal = 0
-        patch.currentTime = 0
+      set({ importing: true })
+      try {
+        const cur = get().videos
+        const added = await Promise.all(paths.map((p, i) => probeToSource(p, cur.length + i)))
+        const sidecars = await Promise.all(added.map(loadSidecar))
+        const videos = [...cur, ...added]
+        const newClips: Clip[] = []
+        const tagSet = new Set(get().videoTags)
+        sidecars.forEach((r) => {
+          r.clips.forEach((c) => newClips.push(c))
+          r.tags.forEach((t) => tagSet.add(t))
+        })
+        const clips = [...get().clips, ...newClips].map((c, i) => ({ ...c, order: i }))
+        const patch: Partial<AppState> = { videos, clips, videoTags: Array.from(tagSet) }
+        if (get().activeVideoId == null && added[0]) {
+          patch.activeVideoId = added[0].id
+          patch.pendingSeekLocal = 0
+          patch.currentTime = 0
+        }
+        if (cur.length === 0 && added[0]) {
+          // 时间线按"视频"建，避免同目录多场比赛互相串（<视频名>.kkclip）
+          const dir = dirOf(added[0].path)
+          const base = stripExt(added[0].fileName)
+          patch.timelineName = base
+          patch.timelinePath = dir + '/' + base + '.kkclip'
+          patch.projectLoaded = true
+          if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
+          void platform().addRecent(patch.timelinePath)
+          void platform().setSettings({ last_timeline: patch.timelinePath }) // #109
+        }
+        set(patch)
+      } finally {
+        set({ importing: false })
       }
-      if (cur.length === 0 && added[0]) {
-        // 时间线按"视频"建，避免同目录多场比赛互相串（<视频名>.kkclip）
-        const dir = dirOf(added[0].path)
-        const base = stripExt(added[0].fileName)
-        patch.timelineName = base
-        patch.timelinePath = dir + '/' + base + '.kkclip'
-        patch.projectLoaded = true
-        if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
-        void platform().addRecent(patch.timelinePath)
-        void platform().setSettings({ last_timeline: patch.timelinePath }) // #109
-      }
-      set(patch)
     },
 
     chooseAndAddVideos: async () => {

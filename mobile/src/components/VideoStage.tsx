@@ -1,15 +1,25 @@
-import { useRef, useState, type ReactNode } from 'react'
-import { View, Text, Pressable, StyleSheet, PanResponder } from 'react-native'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { View, Text, StyleSheet, PanResponder, Animated } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { useStore } from '@core/store/useStore'
 
-/** 倍率梯：负=倒放，正=正放。中间 1x 为原点 */
-const RATES = [-4, -2, 0.1, 0.25, 1, 2, 4, 8]
-const BASE = RATES.indexOf(1)
-const STEP_PX = 42 // 每档所需位移
+/** 向右滑：慢放 → 正常 → 快进（手指越往右，越靠倍率条右端） */
+const FWD = [0.1, 0.25, 0.5, 1, 2, 4, 8]
+/** 向左滑：快退（倒放是手动回退帧，太高倍率会很卡，封顶 4x） */
+const REV = [-1, -2, -4]
+
+const STEP_PX = 38 // 每档所需位移
+const DEAD_PX = 14 // 死区：按住但几乎没动 → 不选任何档
 const HOLD_MS = 220 // 按住多久进入调速模式
 const FLICK_PX = 60 // 快速滑动的最小位移
 const FLICK_V = 0.5 // 快速滑动的最小速度
+const BTN_HOLD_MS = 1400 // 播放/暂停按钮停留多久后淡出
+
+type Dir = 'fwd' | 'rev'
+interface Pick {
+  dir: Dir
+  idx: number // -1 = 还没选中任何档
+}
 
 interface Props {
   children: ReactNode // <Video> 及其上的静态浮层
@@ -20,7 +30,7 @@ interface Props {
 /**
  * 视频区手势分层：
  *  轻点        → 播放/暂停
- *  按住再横滑  → 弹出倍率条，按位移+速度高亮，松手应用
+ *  按住再横滑  → 弹出倍率条（右=慢放/快进，左=快退），松手应用
  *  快速横滑    → 收起/展开片段列表（onFlick）
  */
 export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
@@ -30,17 +40,43 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   const togglePlay = useStore((s) => s.togglePlay)
   const setSignedRate = useStore((s) => s.setSignedRate)
 
-  const [pickIdx, setPickIdx] = useState<number | null>(null)
+  const [pick, setPick] = useState<Pick | null>(null)
   const holdRef = useRef(false)
   const movedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const idxRef = useRef(BASE)
+  const pickRef = useRef<Pick | null>(null)
   const cbRef = useRef({ onFlick, togglePlay, setSignedRate, enabled })
   cbRef.current = { onFlick, togglePlay, setSignedRate, enabled }
+
+  // —— 播放/暂停按钮：亮一下就淡出，不长期挡着画面 ——
+  const btnOpacity = useRef(new Animated.Value(0)).current
+  const btnAnim = useRef<Animated.CompositeAnimation | null>(null)
+  const flashButton = useCallback((): void => {
+    btnAnim.current?.stop()
+    const a = Animated.sequence([
+      Animated.timing(btnOpacity, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.delay(BTN_HOLD_MS),
+      Animated.timing(btnOpacity, { toValue: 0, duration: 320, useNativeDriver: true })
+    ])
+    btnAnim.current = a
+    a.start()
+  }, [btnOpacity])
+
+  // 播放态一变（含首次有视频时）就闪一下，其余时间保持隐藏
+  useEffect(() => {
+    if (enabled) flashButton()
+  }, [playing, enabled, flashButton])
+
+  useEffect(() => () => btnAnim.current?.stop(), [])
 
   const clearTimer = (): void => {
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = null
+  }
+
+  const setPickBoth = (p: Pick | null): void => {
+    pickRef.current = p
+    setPick(p)
   }
 
   const pan = useRef(
@@ -55,8 +91,7 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
         clearTimer()
         timerRef.current = setTimeout(() => {
           holdRef.current = true
-          idxRef.current = BASE
-          setPickIdx(BASE)
+          setPickBoth({ dir: 'fwd', idx: -1 }) // 先亮出正向条做提示，未选中任何档
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
         }, HOLD_MS)
       },
@@ -68,22 +103,30 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
           if (Math.abs(g.vx) > FLICK_V) clearTimer()
           return
         }
-        // 调速模式：位移 + 速度共同决定高亮档位（滑得快跳得多）
+        // 调速模式：滑动方向决定用哪条倍率梯，位移(+速度加成)决定停在哪一档
         const boosted = g.dx + g.vx * 90
-        const next = Math.max(0, Math.min(RATES.length - 1, BASE + Math.round(boosted / STEP_PX)))
-        if (next !== idxRef.current) {
-          idxRef.current = next
-          setPickIdx(next)
-          void Haptics.selectionAsync()
+        const dir: Dir = boosted >= 0 ? 'fwd' : 'rev'
+        const list = dir === 'fwd' ? FWD : REV
+        const dist = Math.abs(boosted)
+        const idx =
+          dist < DEAD_PX
+            ? -1
+            : Math.max(0, Math.min(list.length - 1, Math.round((dist - DEAD_PX) / STEP_PX)))
+        const cur = pickRef.current
+        if (!cur || cur.dir !== dir || cur.idx !== idx) {
+          setPickBoth({ dir, idx })
+          if (idx >= 0) void Haptics.selectionAsync()
         }
       },
       onPanResponderRelease: (_e, g) => {
         clearTimer()
         if (!cbRef.current.enabled) return
         if (holdRef.current) {
-          cbRef.current.setSignedRate(RATES[idxRef.current]) // 应用高亮的倍率
+          const p = pickRef.current
+          // 只在真的选中了某一档时才改速度；按住没怎么动 → 保持原样
+          if (p && p.idx >= 0) cbRef.current.setSignedRate((p.dir === 'fwd' ? FWD : REV)[p.idx])
           holdRef.current = false
-          setPickIdx(null)
+          setPickBoth(null)
           return
         }
         // 快速横滑 → 收起/展开列表
@@ -97,37 +140,44 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
       onPanResponderTerminate: () => {
         clearTimer()
         holdRef.current = false
-        setPickIdx(null)
+        setPickBoth(null)
       }
     })
   ).current
 
+  const rateList = pick?.dir === 'rev' ? REV : FWD
   const label = (v: number): string => (v < 0 ? `◀${-v}x` : `${v}x`)
 
   return (
     <View style={s.stage} {...pan.panHandlers}>
       {children}
 
-      {/* 中央播放/暂停浮动按钮 */}
-      {enabled && pickIdx == null && (
-        <Pressable style={s.centerBtn} onPress={() => togglePlay()} hitSlop={10}>
+      {/* 中央播放/暂停按钮：只在切换播放态后短暂显示。pointerEvents=none，
+          让点击/按住手势统一交给整个 stage 处理 */}
+      {enabled && pick == null && (
+        <Animated.View style={[s.centerBtn, { opacity: btnOpacity }]} pointerEvents="none">
           <Text style={s.centerIcon}>{playing ? '❚❚' : '▶'}</Text>
-        </Pressable>
+        </Animated.View>
       )}
 
-      {/* 调速条：按住横滑时弹出 */}
-      {pickIdx != null && (
-        <View style={s.rateBar} pointerEvents="none">
-          {RATES.map((v, i) => (
-            <View key={v} style={[s.rateItem, i === pickIdx && s.rateItemOn]}>
-              <Text style={[s.rateText, i === pickIdx && s.rateTextOn]}>{label(v)}</Text>
-            </View>
-          ))}
+      {/* 调速条：按住横滑时弹出，左右方向对应两套倍率 */}
+      {pick != null && (
+        <View style={s.rateWrap} pointerEvents="none">
+          <View style={s.rateBar}>
+            {rateList.map((v, i) => (
+              <View key={v} style={[s.rateItem, i === pick.idx && s.rateItemOn]}>
+                <Text style={[s.rateText, i === pick.idx && s.rateTextOn]}>{label(v)}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={s.rateTip}>
+            {pick.dir === 'rev' ? '← 快退　｜　右滑：慢放 / 快进' : '左滑：快退　｜　慢放 / 快进 →'}
+          </Text>
         </View>
       )}
 
       {/* 当前非 1x 时角标提示 */}
-      {enabled && pickIdx == null && playing && rate !== 1 && (
+      {enabled && pick == null && playing && rate !== 1 && (
         <View style={s.rateBadge} pointerEvents="none">
           <Text style={s.rateBadgeText}>
             {direction === 'reverse' ? '◀' : ''}
@@ -153,18 +203,19 @@ const s = StyleSheet.create({
     justifyContent: 'center'
   },
   centerIcon: { color: 'rgba(255,255,255,0.85)', fontSize: 24 },
+  rateWrap: { position: 'absolute', alignItems: 'center' },
   rateBar: {
-    position: 'absolute',
     flexDirection: 'row',
     gap: 4,
     backgroundColor: 'rgba(2,6,23,0.75)',
     borderRadius: 14,
     padding: 6
   },
-  rateItem: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 9 },
+  rateItem: { paddingVertical: 8, paddingHorizontal: 9, borderRadius: 9 },
   rateItemOn: { backgroundColor: '#0891b2' },
   rateText: { color: 'rgba(255,255,255,0.5)', fontSize: 14 },
   rateTextOn: { color: '#fff', fontSize: 15, fontWeight: '500' },
+  rateTip: { color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 7 },
   rateBadge: {
     position: 'absolute',
     top: 10,
