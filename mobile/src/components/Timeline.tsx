@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { View, Text, StyleSheet, PanResponder, LayoutChangeEvent, Pressable, Alert } from 'react-native'
+import * as Haptics from 'expo-haptics'
 import { useStore } from '@core/store/useStore'
 import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/timeline'
 
@@ -14,7 +15,7 @@ interface TimelineProps {
 /** 超过这个位移才算拖拽，否则按「点击」处理 */
 const DRAG_PX = 6
 /** 起止手柄的宽度（同时也是两个手柄的最小间距） */
-const HANDLE = 22
+const HANDLE = 30
 
 export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const videos = useStore((s) => s.videos)
@@ -35,8 +36,6 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
   const [width, setWidth] = useState(0)
   const widthRef = useRef(0)
-  const trackRef = useRef<View>(null)
-  const trackX = useRef(0) // 轨道在窗口里的左边界，用来把 pageX 换算成轨道内坐标
   const total = totalDuration(videos)
 
   // PanResponder 只创建一次，用 ref 读取每次渲染的最新值
@@ -71,9 +70,6 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     const w = e.nativeEvent.layout.width
     widthRef.current = w
     setWidth(w)
-    trackRef.current?.measureInWindow((x) => {
-      trackX.current = x
-    })
   }
 
   const timeAtX = (x: number): number | null => {
@@ -98,6 +94,8 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const hitClipRef = useRef<string | null>(null)
   const selectedIdRef = useRef<string | null>(null)
   selectedIdRef.current = selectedClipId
+  /** 按下手柄那一刻的起止时间，拖动期间以它为基准 */
+  const dragBaseRef = useRef<{ in: number; out: number } | null>(null)
 
   /**
    * 选中片段后，两端直接长出手柄。
@@ -113,19 +111,27 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         // 播放头会跟拖动抢位置，先停住并退出片段循环
         ref.current.pause()
         ref.current.clearPreview()
+        const c = ref.current.clips.find((x) => x.id === selectedIdRef.current)
+        dragBaseRef.current = c ? { in: c.in, out: c.out } : null
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       },
-      onPanResponderMove: (e) => {
+      // 用「按下那一刻的时间 + 手指位移换算出的时间差」来算，
+      // 不依赖任何绝对坐标 —— measureInWindow 拿到的原点不一定可靠，
+      // 一旦为 0，绝对算法会把时间直接算到轨道末端（表现为一拖就飞出片段范围）
+      onPanResponderMove: (_e, g) => {
         const { clips: cs, videos: vs, total: tt } = ref.current
+        const base = dragBaseRef.current
         const c = cs.find((x) => x.id === selectedIdRef.current)
         const w = widthRef.current
-        if (!c || w <= 0 || tt <= 0) return
-        // 手柄自己就是触摸目标，locationX 会是相对手柄的 —— 必须用 pageX
-        const gx = Math.max(0, Math.min(w, e.nativeEvent.pageX - trackX.current))
-        const g = (gx / w) * tt
+        if (!c || !base || w <= 0 || tt <= 0) return
+        const delta = (g.dx / w) * tt
         const off = videoOffset(vs, c.videoId)
-        const localT = g - off
-        const nin = which === 'in' ? Math.max(0, Math.min(localT, c.out - 0.1)) : c.in
-        const nout = which === 'out' ? Math.max(c.in + 0.1, localT) : c.out
+        const v = vs.find((x) => x.id === c.videoId)
+        const maxLocal = v?.duration && v.duration > 0 ? v.duration : base.out + 3600
+        const nin =
+          which === 'in' ? Math.max(0, Math.min(base.in + delta, base.out - 0.1)) : base.in
+        const nout =
+          which === 'out' ? Math.min(maxLocal, Math.max(base.out + delta, base.in + 0.1)) : base.out
         ref.current.updateClipTimes(c.id, nin, nout)
         ref.current.seek(off + (which === 'in' ? nin : nout))
       }
@@ -292,12 +298,14 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           <>
             <View
               style={[s.handle, s.handleIn, { left: selL - HANDLE / 2 }]}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               {...inPan.panHandlers}
             >
               <Text style={s.handleText}>‖</Text>
             </View>
             <View
               style={[s.handle, s.handleOut, { left: selR - HANDLE / 2 }]}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               {...outPan.panHandlers}
             >
               <Text style={s.handleText}>‖</Text>
@@ -324,7 +332,8 @@ const s = StyleSheet.create({
   },
   segActive: { backgroundColor: '#334155' },
   segText: { color: '#cbd5e1', fontSize: 10 },
-  track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6, overflow: 'hidden' },
+  // 不能 overflow:hidden —— 手柄要伸出轨道上下才够大，被裁掉的部分连触摸也收不到
+  track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6 },
   trackFloat: { height: 20, backgroundColor: 'rgba(30,41,59,0.6)' },
   divider: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#475569' },
   clip: { position: 'absolute', top: 4, bottom: 4, backgroundColor: 'rgba(59,130,246,0.8)', borderRadius: 2 },
@@ -333,8 +342,8 @@ const s = StyleSheet.create({
   cursor: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#22d3ee' },
   handle: {
     position: 'absolute',
-    top: -7,
-    bottom: -7,
+    top: -11,
+    bottom: -11,
     width: HANDLE,
     borderRadius: 6,
     alignItems: 'center',
