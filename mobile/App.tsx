@@ -255,12 +255,21 @@ export default function App(): JSX.Element {
                 <View style={s.pill} pointerEvents="none">
                   {statusText}
                 </View>
-                {/* 片段列表开关：做成浮动按钮，比屏幕边缘的细条好找得多 */}
-                <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
-                  <Text style={s.listToggleText}>
-                    {listOpen ? '片段 ▶' : `☰ 片段 ${clips.length}`}
-                  </Text>
-                </Pressable>
+                {/* 相册/视频/片段都收进顶栏：底部只留细进度条，把高度还给画面 */}
+                <View style={s.landTopBtns}>
+                  <Controls
+                    floating
+                    compact
+                    videoCount={videos.length}
+                    onPickVideos={() => void chooseAndAddVideos()}
+                    onManageVideos={() => setVideoSheetOpen(true)}
+                  />
+                  <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
+                    <Text style={s.listToggleText}>
+                      {listOpen ? '片段 ▶' : `☰ 片段 ${clips.length}`}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
 
               {/* 标记按钮：独立浮在右侧，避免被控制条挤掉；两手握持时右拇指可及 */}
@@ -268,12 +277,6 @@ export default function App(): JSX.Element {
 
               <View style={s.landBottom}>
                 <Timeline floating />
-                <Controls
-                  floating
-                  videoCount={videos.length}
-                  onPickVideos={() => void chooseAndAddVideos()}
-                  onManageVideos={() => setVideoSheetOpen(true)}
-                />
               </View>
             </VideoStage>
 
@@ -351,9 +354,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4
   },
-  landBottom: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  // 标记按钮浮在视频区右侧、时间线之上
-  landMark: { position: 'absolute', right: 10, bottom: 96 },
+  landBottom: { position: 'absolute', left: 0, right: 0, bottom: 4 },
+  landTopBtns: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // 标记按钮浮在视频区右侧、时间线之上（底部只剩细进度条了，可以压低）
+  landMark: { position: 'absolute', right: 10, bottom: 44 },
   landList: {
     width: 300,
     backgroundColor: '#0f172a',
@@ -382,12 +386,10 @@ const s = StyleSheet.create({
   listToggleText: { color: '#fff', fontSize: 13, fontWeight: '500' },
 
   // 竖屏
-  portVideo: {
-    height: 210,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
+  // 不能加 alignItems:'center'：VideoStage 是普通子元素，横向尺寸会被压成「内容宽度」，
+  // 而它的内容全是绝对定位的（Video 用 absoluteFill），算出来就是 0 —— 整块黑屏。
+  // 居中由 VideoStage 自己负责。
+  portVideo: { height: 210, backgroundColor: '#000' },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

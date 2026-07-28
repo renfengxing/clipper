@@ -104,8 +104,9 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
   return (
     <View style={[s.wrap, floating && s.wrapFloat]}>
-      {/* 视频分段标签 */}
-      {segs.length > 1 && (
+      {/* 视频分段标签：横屏浮层里不显示 —— 太占高度，且视频的增删排序已经
+          有「视频 N」面板可用，轨道上的分界线也仍然标出了各段边界 */}
+      {!floating && segs.length > 1 && (
         <View style={[s.segRow, { width }]}>
           {segs.map((v, i) => (
             // 点=跳到该视频开头；长按=从时间线移除（片段仍随视频保留）
@@ -197,7 +198,7 @@ const s = StyleSheet.create({
   segActive: { backgroundColor: '#334155' },
   segText: { color: '#cbd5e1', fontSize: 10 },
   track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6, overflow: 'hidden' },
-  trackFloat: { height: 34, backgroundColor: 'rgba(30,41,59,0.6)' },
+  trackFloat: { height: 20, backgroundColor: 'rgba(30,41,59,0.6)' },
   divider: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#475569' },
   clip: { position: 'absolute', top: 4, bottom: 4, backgroundColor: 'rgba(59,130,246,0.8)', borderRadius: 2 },
   clipActive: { backgroundColor: '#22d3ee' },
