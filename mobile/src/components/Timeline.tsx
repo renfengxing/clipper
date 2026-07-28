@@ -93,7 +93,10 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           ref.current.selectClip(hitClipRef.current)
         }
         hitClipRef.current = null
-      }
+      },
+      // 横屏时时间线浮在 VideoStage 上，拖到一半别被父级的调速手势抢走
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true
     })
   ).current
 
@@ -143,7 +146,14 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       {/* 轨道内的装饰层一律 pointerEvents=none：
           RN 的 locationX 是相对「触摸目标」算的，若点中的是片段色条这类子 View，
           拿到的就是相对色条自身的坐标，换算出的时间完全不对 —— 表现为点片段跳到开头 */}
-      <View style={[s.track, floating && s.trackFloat]} onLayout={onLayout} {...pan.panHandlers}>
+      {/* 轨道视觉上很细，但用 hitSlop 把可触区域上下各撑开 —— 否则手指稍偏就落到
+          外层 padding 上，touch 冒泡给 VideoStage 变成「按住调速」 */}
+      <View
+        style={[s.track, floating && s.trackFloat]}
+        hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
+        onLayout={onLayout}
+        {...pan.panHandlers}
+      >
         {/* 分段分界线 */}
         {segs.slice(1).map((v) => (
           <View

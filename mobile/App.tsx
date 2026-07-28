@@ -206,6 +206,12 @@ export default function App(): JSX.Element {
 
   const markButton = (big?: boolean): JSX.Element => (
     <View style={s.markRow}>
+      {/* 取消放左边、标记终点放右边：右手拇指落在最常按的那个上 */}
+      {marking && (
+        <Pressable style={s.cancelBtn} onPress={() => clearMarks()}>
+          <Text style={s.cancelText}>取消</Text>
+        </Pressable>
+      )}
       <Pressable
         style={[
           s.markBtn,
@@ -220,11 +226,6 @@ export default function App(): JSX.Element {
           {marking ? `■ 标记终点 · ${elapsed.toFixed(1)}s` : '◉ 标记起点'}
         </Text>
       </Pressable>
-      {marking && (
-        <Pressable style={s.cancelBtn} onPress={() => clearMarks()}>
-          <Text style={s.cancelText}>取消</Text>
-        </Pressable>
-      )}
     </View>
   )
 
@@ -342,7 +343,8 @@ const s = StyleSheet.create({
   },
   landTopBar: {
     position: 'absolute',
-    top: 8,
+    // 横屏下 SafeAreaView 的顶部安全区几乎为 0（刘海在侧边），贴太近会压到状态栏
+    top: 26,
     left: 10,
     right: 10,
     flexDirection: 'row',

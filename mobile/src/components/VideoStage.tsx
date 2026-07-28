@@ -49,6 +49,8 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   const direction = useStore((s) => s.direction)
   const togglePlay = useStore((s) => s.togglePlay)
   const setSignedRate = useStore((s) => s.setSignedRate)
+  const pause = useStore((s) => s.pause)
+  const resume = useStore((s) => s.resume)
 
   const [pick, setPick] = useState<Pick | null>(null)
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 })
@@ -57,8 +59,10 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   const movedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pickRef = useRef<Pick | null>(null)
-  const cbRef = useRef({ onFlick, togglePlay, setSignedRate, enabled })
-  cbRef.current = { onFlick, togglePlay, setSignedRate, enabled }
+  const cbRef = useRef({ onFlick, togglePlay, setSignedRate, pause, resume, enabled })
+  cbRef.current = { onFlick, togglePlay, setSignedRate, pause, resume, enabled }
+  /** 进入调速模式前是否在播 —— 松手没选档时用它还原 */
+  const wasPlayingRef = useRef(false)
 
   // —— 播放/暂停按钮：亮一下就淡出，不长期挡着画面 ——
   const btnOpacity = useRef(new Animated.Value(0)).current
@@ -104,6 +108,9 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
         const { locationX, locationY } = e.nativeEvent
         timerRef.current = setTimeout(() => {
           holdRef.current = true
+          // 选倍率时先把画面停住：正放/快进/慢放/倒放都停，看清当前这一帧再决定
+          wasPlayingRef.current = useStore.getState().playing
+          if (wasPlayingRef.current) cbRef.current.pause()
           // 先亮出正向条做提示，未选中任何档
           setPickBoth({ dir: 'fwd', idx: -1, x: locationX, y: locationY })
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -138,8 +145,12 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
         if (!cbRef.current.enabled) return
         if (holdRef.current) {
           const p = pickRef.current
-          // 只在真的选中了某一档时才改速度；按住没怎么动 → 保持原样
-          if (p && p.idx >= 0) cbRef.current.setSignedRate((p.dir === 'fwd' ? FWD : REV)[p.idx])
+          if (p && p.idx >= 0) {
+            cbRef.current.setSignedRate((p.dir === 'fwd' ? FWD : REV)[p.idx])
+          } else if (wasPlayingRef.current) {
+            // 按住没选档就松手 → 恢复成按住之前的播放状态
+            cbRef.current.resume()
+          }
           holdRef.current = false
           setPickBoth(null)
           return
@@ -154,6 +165,7 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
       },
       onPanResponderTerminate: () => {
         clearTimer()
+        if (holdRef.current && wasPlayingRef.current) cbRef.current.resume()
         holdRef.current = false
         setPickBoth(null)
       }
