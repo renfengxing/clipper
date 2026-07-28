@@ -337,11 +337,12 @@ export default function App(): JSX.Element {
                     onManageVideos={() => setVideoSheetOpen(true)}
                     onTools={() => setSettingsOpen(true)}
                   />
-                  <Pressable style={s.listToggle} onPress={() => setListOpen(!listOpen)}>
-                    <Text style={s.listToggleText}>
-                      {listOpen ? '片段 ▶' : `☰ 片段 ${clips.length}`}
-                    </Text>
-                  </Pressable>
+                  {/* 展开时列表自己带「收起」条，顶栏就不用再占一个位置 */}
+                  {!listOpen && (
+                    <Pressable style={s.listToggle} onPress={() => setListOpen(true)}>
+                      <Text style={s.listToggleText}>☰ 片段 {clips.length}</Text>
+                    </Pressable>
+                  )}
                 </View>
               </View>
 
