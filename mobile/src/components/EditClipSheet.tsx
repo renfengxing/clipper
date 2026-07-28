@@ -13,14 +13,17 @@ import {
 import { useStore } from '@core/store/useStore'
 import { fmtMs } from '@core/utils/time'
 import { videoOffset } from '@core/utils/timeline'
+import { TrimBar } from './TrimBar'
 
 interface Props {
   clipId: string | null
   onClose: () => void
+  /** 切到时间线上裁剪：那里画面不被弹窗挡住 */
+  onTrimOnTimeline?: (id: string) => void
 }
 
 /** 改片段的标题与标签。标签点一下就切换，也能现打新词 */
-export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
+export function EditClipSheet({ clipId, onClose, onTrimOnTimeline }: Props): JSX.Element {
   const clips = useStore((s) => s.clips)
   const videoTags = useStore((s) => s.videoTags)
   const updateClipTitle = useStore((s) => s.updateClipTitle)
@@ -87,63 +90,6 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
     </View>
   )
 
-  // —— 拖拽裁剪条 ——
-  const span = Math.max(0.001, win.end - win.start)
-  const xOf = (t: number): number => ((t - win.start) / span) * barW
-  const tOf = (x: number): number => win.start + (x / Math.max(1, barW)) * span
-
-  liveRef.current = { in: clip.in, out: clip.out }
-
-  const makeHandle = (which: 'in' | 'out'): ReturnType<typeof PanResponder.create> =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        pause()
-      },
-      onPanResponderMove: (e) => {
-        // 用 pageX 减去条自身的窗口原点：locationX 是相对触摸目标的，手柄本身就是目标
-        const t = tOf(e.nativeEvent.pageX - barX.current)
-        const cur = liveRef.current
-        const next =
-          which === 'in'
-            ? Math.max(win.start, Math.min(t, cur.out - 0.1))
-            : Math.min(win.end, Math.max(t, cur.in + 0.1))
-        const nin = which === 'in' ? next : cur.in
-        const nout = which === 'out' ? next : cur.out
-        liveRef.current = { in: nin, out: nout }
-        updateClipTimes(clip.id, nin, nout)
-        seek(offset + next) // 画面跟着手柄走，才好对准
-      }
-    })
-
-  const trimBar = (
-    <View
-      ref={barRef}
-      style={s.bar2}
-      onLayout={(e) => {
-        setBarW(e.nativeEvent.layout.width)
-        barRef.current?.measureInWindow((x) => {
-          barX.current = x
-        })
-      }}
-    >
-      <View style={[s.sel, { left: xOf(clip.in), width: Math.max(2, xOf(clip.out) - xOf(clip.in)) }]} />
-      <View
-        style={[s.handle, s.handleIn, { left: xOf(clip.in) - HANDLE / 2 }]}
-        {...makeHandle('in').panHandlers}
-      >
-        <Text style={s.handleText}>‖</Text>
-      </View>
-      <View
-        style={[s.handle, s.handleOut, { left: xOf(clip.out) - HANDLE / 2 }]}
-        {...makeHandle('out').panHandlers}
-      >
-        <Text style={s.handleText}>‖</Text>
-      </View>
-    </View>
-  )
-
   const tags = clip.tags || []
   // 已用过的词 + 该视频的词表，去重后一起给出来
   const options = Array.from(new Set([...videoTags, ...tags]))
@@ -197,8 +143,21 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
               multiline
             />
 
-            <Text style={[s.label, s.gap]}>起止时间</Text>
-            {trimBar}
+            <View style={[s.gap, s.trimHead]}>
+              <Text style={s.label}>起止时间</Text>
+              {onTrimOnTimeline && (
+                <Pressable
+                  onPress={() => {
+                    onTrimOnTimeline(clip.id)
+                    onClose()
+                  }}
+                >
+                  <Text style={s.trimLink}>在画面上拖 ›</Text>
+                </Pressable>
+              )}
+            </View>
+            <TrimBar clipId={clip.id} />
+            <View style={s.barGap} />
             {timeRow('in')}
             {timeRow('out')}
             <Text style={s.hint}>
@@ -238,30 +197,10 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
   )
 }
 
-const HANDLE = 26
-
 const s = StyleSheet.create({
-  bar2: {
-    height: 44,
-    backgroundColor: '#1e293b',
-    borderRadius: 8,
-    marginBottom: 12,
-    marginHorizontal: HANDLE / 2,
-    justifyContent: 'center'
-  },
-  sel: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(8,145,178,0.45)' },
-  handle: {
-    position: 'absolute',
-    top: -4,
-    bottom: -4,
-    width: HANDLE,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  handleIn: { backgroundColor: '#22d3ee' },
-  handleOut: { backgroundColor: '#f59e0b' },
-  handleText: { color: '#0f172a', fontSize: 13, fontWeight: '700' },
+  trimHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  trimLink: { color: '#22d3ee', fontSize: 12 },
+  barGap: { height: 12 },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.65)', justifyContent: 'flex-end' },
   sheet: {

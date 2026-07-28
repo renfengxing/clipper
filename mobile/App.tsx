@@ -31,6 +31,7 @@ import { ExportSheet } from './src/components/ExportSheet'
 import { Subtitle } from './src/components/Subtitle'
 import { RecentList } from './src/components/RecentList'
 import { EditClipSheet } from './src/components/EditClipSheet'
+import { TrimPanel } from './src/components/TrimPanel'
 
 /** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop，再留足余量 */
 const LAND_BOTTOM_ZONE = 96
@@ -70,6 +71,7 @@ export default function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [exportMode, setExportMode] = useState<'export' | 'merge' | null>(null)
   const [editClipId, setEditClipId] = useState<string | null>(null)
+  const [trimClipId, setTrimClipId] = useState<string | null>(null)
 
   // 片段/时间线自动落盘。此前手机端完全没有保存，退出即丢
   useEffect(() => startAutoSave(), [])
@@ -190,7 +192,8 @@ export default function App(): JSX.Element {
     onReport: () => void runReport(),
     onExport: () => setExportMode('export'),
     onMerge: () => setExportMode('merge'),
-    onEditClip: (id: string) => setEditClipId(id)
+    onEditClip: (id: string) => setEditClipId(id),
+    onTrimClip: (id: string) => setTrimClipId(id)
   }
 
   // 关闭整条时间线：从「视频」面板里提到左上角，一步可达
@@ -313,7 +316,11 @@ export default function App(): JSX.Element {
       <ReportSheet visible={reportOpen} onClose={() => setReportOpen(false)} />
       <SettingsSheet visible={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ExportSheet mode={exportMode} onClose={() => setExportMode(null)} />
-      <EditClipSheet clipId={editClipId} onClose={() => setEditClipId(null)} />
+      <EditClipSheet
+        clipId={editClipId}
+        onClose={() => setEditClipId(null)}
+        onTrimOnTimeline={(id) => setTrimClipId(id)}
+      />
       {importOverlay}
     </>
   )
@@ -361,7 +368,11 @@ export default function App(): JSX.Element {
               <View style={s.landMark}>{markButton()}</View>
 
               <View style={s.landBottom}>
-                <Timeline floating />
+                {trimClipId ? (
+                  <TrimPanel floating clipId={trimClipId} onDone={() => setTrimClipId(null)} />
+                ) : (
+                  <Timeline floating />
+                )}
               </View>
             </VideoStage>
 
@@ -406,7 +417,11 @@ export default function App(): JSX.Element {
             {videos.length} 个视频 · {clips.length} 个片段
           </Text>
         </View>
-        <Timeline />
+        {trimClipId ? (
+          <TrimPanel clipId={trimClipId} onDone={() => setTrimClipId(null)} />
+        ) : (
+          <Timeline />
+        )}
         <Controls
           videoCount={videos.length}
           onPickVideos={() => void chooseAndAddVideos()}
