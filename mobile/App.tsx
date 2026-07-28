@@ -24,6 +24,9 @@ import { VideoStage } from './src/components/VideoStage'
 import { AlbumPicker } from './src/components/AlbumPicker'
 import { VideoSheet } from './src/components/VideoSheet'
 
+/** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop 余量 */
+const LAND_BOTTOM_ZONE = 76
+
 export default function App(): JSX.Element {
   const { width, height } = useWindowDimensions()
   const landscape = width > height
@@ -247,7 +250,7 @@ export default function App(): JSX.Element {
         <SafeAreaView style={s.root} edges={['top', 'bottom', 'left', 'right']}>
           <StatusBar style="light" hidden />
           <View style={s.landRow}>
-            <VideoStage onFlick={onFlick} enabled={!!active}>
+            <VideoStage onFlick={onFlick} enabled={!!active} bottomInset={LAND_BOTTOM_ZONE}>
               {videoEl}
               {markingOverlay}
               {playErrorOverlay}
@@ -356,7 +359,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4
   },
-  landBottom: { position: 'absolute', left: 0, right: 0, bottom: 4 },
+  // 抬离屏幕底边：太靠下会撞上 iOS 的上滑手势区，一拖就切到别的 app
+  landBottom: { position: 'absolute', left: 0, right: 0, bottom: 22 },
   landTopBtns: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   // 标记按钮浮在视频区右侧、时间线之上（底部只剩细进度条了，可以压低）
   landMark: { position: 'absolute', right: 10, bottom: 44 },

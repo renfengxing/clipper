@@ -35,6 +35,12 @@ interface Props {
   children: ReactNode // <Video> 及其上的静态浮层
   onFlick: (dir: 'left' | 'right') => void
   enabled: boolean
+  /**
+   * 底部保留高度：这块归时间线，本组件一律不接管。
+   * 只靠时间线自己的 hitSlop 不够 —— 没打中轨道的触摸会冒泡上来，
+   * 被误判成「按住调速」或「快速横滑收展列表」。
+   */
+  bottomInset?: number
 }
 
 /**
@@ -43,7 +49,7 @@ interface Props {
  *  按住再横滑  → 弹出倍率条（右=慢放/快进，左=快退），松手应用
  *  快速横滑    → 收起/展开片段列表（onFlick）
  */
-export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
+export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Props): JSX.Element {
   const playing = useStore((s) => s.playing)
   const rate = useStore((s) => s.rate)
   const direction = useStore((s) => s.direction)
@@ -54,6 +60,12 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
 
   const [pick, setPick] = useState<Pick | null>(null)
   const [stage, setStage] = useState<Size>({ w: 0, h: 0 })
+  const stageRef = useRef<Size>({ w: 0, h: 0 })
+  const insetRef = useRef(bottomInset)
+  insetRef.current = bottomInset
+  /** 触点是否落在底部时间线专属区 */
+  const inDeadZone = (y: number): boolean =>
+    insetRef.current > 0 && stageRef.current.h > 0 && y > stageRef.current.h - insetRef.current
   const [bar, setBar] = useState<Size>({ w: 0, h: 0 })
   const holdRef = useRef(false)
   const movedRef = useRef(false)
@@ -97,8 +109,9 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
 
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
+      onStartShouldSetPanResponder: (e) => !inDeadZone(e.nativeEvent.locationY),
+      onMoveShouldSetPanResponder: (e, g) =>
+        !inDeadZone(e.nativeEvent.locationY) && (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
       onPanResponderGrant: (e) => {
         if (!cbRef.current.enabled) return
         holdRef.current = false
@@ -201,9 +214,11 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   return (
     <View
       style={s.stage}
-      onLayout={(e) =>
-        setStage({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
-      }
+      onLayout={(e) => {
+        const { width: w, height: h } = e.nativeEvent.layout
+        stageRef.current = { w, h }
+        setStage({ w, h })
+      }}
       {...pan.panHandlers}
     >
       {children}
