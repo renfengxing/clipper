@@ -163,7 +163,25 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         const nout =
           which === 'out' ? Math.min(maxLocal, Math.max(base.out + delta, base.in + 0.1)) : base.out
         ref.current.updateClipTimes(c.id, nin, nout)
-        ref.current.seek(off + (which === 'in' ? nin : nout))
+        const g0 = off + (which === 'in' ? nin : nout)
+        ref.current.seek(g0)
+
+        // 拖到窗口边缘就让窗口跟着平移，否则手柄会跑到屏幕外，
+        // 既看不见、也没法再往外扩 —— 只平移不缩放，px↔时间的比例保持不变，
+        // 拖动手感才是线性的
+        const vs0 = ref.current.viewStart
+        const span = ref.current.viewSpan
+        const tot = ref.current.total
+        const margin = span * 0.12
+        let shift = 0
+        if (g0 < vs0 + margin) shift = g0 - margin - vs0
+        else if (g0 > vs0 + span - margin) shift = g0 + margin - (vs0 + span)
+        if (shift !== 0 && tot > span) {
+          const ns = Math.max(0, Math.min(vs0 + shift, tot - span))
+          setZoom({ start: ns, end: ns + span })
+        } else if (shift !== 0) {
+          setZoom({ start: 0, end: tot })
+        }
       },
       onPanResponderRelease: () => {
         setDragging(null)
@@ -236,6 +254,10 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     selL = mid - HANDLE * 0.35
     selR = mid + HANDLE * 0.35
   }
+  // 端点落在窗口之外时把手柄贴在边上，绝不让它跑出屏幕（跑出去就再也抓不回来了）
+  const clampX = (x: number): number => Math.max(HANDLE / 2, Math.min(x, Math.max(HANDLE / 2, width - HANDLE / 2)))
+  const selLc = clampX(selL)
+  const selRc = clampX(selR)
 
   return (
     <View style={[s.wrap, floating && s.wrapFloat]}>
@@ -246,6 +268,8 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           <Text style={s.editArrow}>→</Text>
           <Text style={s.editOut}>{fmtMs(sel.out)}</Text>
           <Text style={s.editDur}>{(sel.out - sel.in).toFixed(1)}s</Text>
+          {selL < 0 && <Text style={s.editEdge}>◀</Text>}
+          {selR > width && <Text style={s.editEdge}>▶</Text>}
           {zoom && (
             <Pressable onPress={() => setZoom(null)} hitSlop={8}>
               <Text style={s.editAction}>全部</Text>
@@ -294,6 +318,10 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
       {/* 轨道视觉上很细，用 hitSlop 把可触区域上下撑开。
           左右不撑：那两侧换算出的时间是负数或超尾，会被夹到 0 —— 表现为「点一下跳回开头」 */}
+      {/* 手柄必须和轨道平级，不能做它的子元素：
+          轨道自己也有 onMoveShouldSetPanResponder，做父级会在拖动中途把响应权抢走，
+          接着按「点在片段外」处理 → deselectClip → 手柄凭空消失、区间也没改成 */}
+      <View style={[s.trackArea, floating && s.trackAreaFloat]}>
       <View
         style={[s.track, floating && s.trackFloat]}
         hitSlop={{ top: 14, bottom: 14, left: 0, right: 0 }}
@@ -323,24 +351,26 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           <View style={[s.cursor, { left: Math.max(0, pct(currentTime) - 1) }]} />
         </View>
 
-        {/* 选中片段的起止手柄 */}
+      </View>
+
+        {/* box-none：手柄之外的地方照常穿透给轨道 */}
         {sel && (
-          <>
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <View
-              style={[s.handle, s.handleIn, dragging === 'in' && s.handleOn, { left: selL - HANDLE / 2 }]}
+              style={[s.handle, s.handleIn, dragging === 'in' && s.handleOn, { left: selLc - HANDLE / 2 }]}
               hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
               {...inPan.panHandlers}
             >
               <Text style={s.handleText}>‖</Text>
             </View>
             <View
-              style={[s.handle, s.handleOut, dragging === 'out' && s.handleOn, { left: selR - HANDLE / 2 }]}
+              style={[s.handle, s.handleOut, dragging === 'out' && s.handleOn, { left: selRc - HANDLE / 2 }]}
               hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
               {...outPan.panHandlers}
             >
               <Text style={s.handleText}>‖</Text>
             </View>
-          </>
+          </View>
         )}
       </View>
     </View>
@@ -356,6 +386,7 @@ const s = StyleSheet.create({
   editArrow: { color: '#475569', fontSize: 11 },
   editOut: { color: '#f59e0b', fontSize: 12, fontVariant: ['tabular-nums'] },
   editDur: { color: '#94a3b8', fontSize: 11, marginLeft: 2 },
+  editEdge: { color: '#f59e0b', fontSize: 11 },
   editAction: { color: '#e2e8f0', fontSize: 12, marginLeft: 10 },
 
   segRow: { height: 20, marginBottom: 4 },
@@ -371,6 +402,8 @@ const s = StyleSheet.create({
   segActive: { backgroundColor: '#334155' },
   segText: { color: '#cbd5e1', fontSize: 10 },
 
+  trackArea: { height: 40 },
+  trackAreaFloat: { height: 20 },
   track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6 },
   trackFloat: { height: 20, backgroundColor: 'rgba(30,41,59,0.6)' },
   clipLayer: { ...StyleSheet.absoluteFillObject, borderRadius: 6, overflow: 'hidden' },
