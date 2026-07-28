@@ -327,7 +327,6 @@ export default function App(): JSX.Element {
           <View style={s.landRow}>
             <VideoStage onFlick={onFlick} enabled={!!active} bottomInset={LAND_BOTTOM_ZONE}>
               {videoEl}
-              {!active && <RecentList floating />}
               <Subtitle />
               {markingOverlay}
               {playErrorOverlay}
@@ -365,6 +364,9 @@ export default function App(): JSX.Element {
                 <Timeline floating />
               </View>
             </VideoStage>
+
+            {/* 放在 VideoStage 外面：它带着 PanResponder，做祖先会跟列表抢触摸 */}
+            {!active && <RecentList floating />}
 
             {listOpen ? (
               <View style={s.landList}>

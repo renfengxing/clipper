@@ -95,11 +95,11 @@ export function RecentList({ floating }: Props = {}): JSX.Element | null {
 const s = StyleSheet.create({
   wrap: {},
   // 横屏：浮在空白播放区中央
-  wrapFloat: { position: 'absolute', left: 40, right: 40, top: '46%', bottom: 24 },
+  wrapFloat: { position: 'absolute', left: 40, right: 40, top: '44%', bottom: 20 },
   // 竖屏：占据片段列表那一块，跟着正常文档流走
   wrapBlock: { flex: 1, paddingHorizontal: 16, paddingTop: 10 },
   head: { color: '#475569', fontSize: 11, marginBottom: 6, paddingHorizontal: 4 },
-  list: { borderRadius: 9, borderWidth: 0.5, borderColor: '#1e293b' },
+  list: { flex: 1, borderRadius: 9, borderWidth: 0.5, borderColor: '#1e293b' },
   row: {
     paddingHorizontal: 12,
     paddingVertical: 12,

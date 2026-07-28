@@ -141,10 +141,14 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
       // onStartShouldSetPanResponder 在每次触摸开始时都会被调用（即便最终没拿到响应者），
       // 正好用来记住起手位置。
       onStartShouldSetPanResponder: (e) => {
+        // 没有视频时这里没有任何可操作的东西。此前忘了判 enabled，
+        // 于是空白态下它照样抢走响应权再空转，压在上面的「最近打开」就点不动了
+        if (!cbRef.current.enabled) return false
         startedLowRef.current = inDeadZone(e)
         return !startedLowRef.current
       },
       onMoveShouldSetPanResponder: (e, g) =>
+        cbRef.current.enabled &&
         !startedLowRef.current &&
         !inDeadZone(e) &&
         (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
