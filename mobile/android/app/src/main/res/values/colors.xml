@@ -1,0 +1,6 @@
+<resources>
+  <color name="colorPrimary">#023c69</color>
+  <color name="colorPrimaryDark">#ffffff</color>
+  <!-- prebuild 生成的 drawable/splashscreen.xml 引用了它，但未装 expo-splash-screen 时不会自动生成 -->
+  <color name="splashscreen_background">#0f172a</color>
+</resources>

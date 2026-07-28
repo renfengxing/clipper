@@ -1,0 +1,4 @@
+# Gradle 的 Windows 批处理脚本必须保留 CRLF，否则在 Windows 上执行会出错；
+# 而 gradlew(sh) 必须是 LF。其余交给 Git 自行判断。
+*.bat text eol=crlf
+mobile/android/gradlew text eol=lf

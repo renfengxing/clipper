@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { useStore } from '@core/store/useStore'
 import { fmtMs } from '@core/utils/time'
-import { videoOffset } from '@core/utils/timeline'
+import { clipDuration, clipGlobalIn, clipGlobalOut } from '@core/utils/timeline'
 
 interface Props {
   clipId: string | null
@@ -27,7 +27,7 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
   const addTag = useStore((s) => s.addTag)
   const removeTag = useStore((s) => s.removeTag)
   const addVideoTag = useStore((s) => s.addVideoTag)
-  const updateClipTimes = useStore((s) => s.updateClipTimes)
+  const updateClipRange = useStore((s) => s.updateClipRange)
   const videos = useStore((s) => s.videos)
   const currentTime = useStore((s) => s.currentTime)
   const seek = useStore((s) => s.seek)
@@ -36,46 +36,38 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
   const clip = clips.find((c) => c.id === clipId) || null
   const [title, setTitle] = useState('')
   const [draft, setDraft] = useState('')
-  /** 裁剪条的时间窗口。打开时定死，否则拖动过程中窗口跟着片段变会很晃 */
-  const [win, setWin] = useState({ start: 0, end: 1 })
-  const [barW, setBarW] = useState(0)
-  const barRef = useRef<View>(null)
-  const barX = useRef(0)
-  const liveRef = useRef({ in: 0, out: 0 })
 
   useEffect(() => {
     if (clip) {
       setTitle(clip.title)
       setDraft('')
-      const pad = Math.max(2, (clip.out - clip.in) * 0.6)
-      setWin({ start: Math.max(0, clip.in - pad), end: clip.out + pad })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clipId])
 
   if (!clip) return <></>
 
-  // 片段存的是「视频内的局部时间」，播放头是跨视频的全局时间，来回换算要减掉偏移
-  const offset = videoOffset(videos, clip.videoId)
+  // 一律用全局时间：片段可以跨视频，两端的局部时间分属不同参照系，直接加减会错
+  const gin = clipGlobalIn(videos, clip)
+  const gout = clipGlobalOut(videos, clip)
   const nudge = (which: 'in' | 'out', by: number): void => {
-    const nextIn = which === 'in' ? clip.in + by : clip.in
-    const nextOut = which === 'out' ? clip.out + by : clip.out
-    // 至少留 0.1s，否则片段会翻转成负长度
-    if (nextOut - nextIn < 0.1) return
-    updateClipTimes(clip.id, Math.max(0, nextIn), Math.max(0.1, nextOut))
-    seek(offset + (which === 'in' ? Math.max(0, nextIn) : Math.max(0.1, nextOut)))
+    const nextIn = which === 'in' ? gin + by : gin
+    const nextOut = which === 'out' ? gout + by : gout
+    if (nextOut - nextIn < 0.1) return // 至少留 0.1s，否则片段会翻转成负长度
+    updateClipRange(clip.id, Math.max(0, nextIn), nextOut)
+    seek(which === 'in' ? Math.max(0, nextIn) : nextOut)
   }
   const takeCurrent = (which: 'in' | 'out'): void => {
-    const local = Math.max(0, currentTime - offset)
-    if (which === 'in' && clip.out - local < 0.1) return
-    if (which === 'out' && local - clip.in < 0.1) return
-    updateClipTimes(clip.id, which === 'in' ? local : clip.in, which === 'out' ? local : clip.out)
+    const t = Math.max(0, currentTime)
+    if (which === 'in' && gout - t < 0.1) return
+    if (which === 'out' && t - gin < 0.1) return
+    updateClipRange(clip.id, which === 'in' ? t : gin, which === 'out' ? t : gout)
   }
 
   const timeRow = (which: 'in' | 'out'): JSX.Element => (
     <View style={s.timeRow}>
       <Text style={s.timeLabel}>{which === 'in' ? '起点' : '终点'}</Text>
-      <Text style={s.timeValue}>{fmtMs(which === 'in' ? clip.in : clip.out)}</Text>
+      <Text style={s.timeValue}>{fmtMs(which === 'in' ? gin : gout)}</Text>
       {[-1, -0.1, 0.1, 1].map((d) => (
         <Pressable key={d} style={s.nudge} onPress={() => nudge(which, d)}>
           <Text style={s.nudgeText}>{d > 0 ? `+${d}` : d}</Text>
@@ -123,7 +115,7 @@ export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
             <Pressable onPress={onClose} hitSlop={12}>
               <Text style={s.cancel}>取消</Text>
             </Pressable>
-            <Text style={s.time}>时长 {(clip.out - clip.in).toFixed(1)}s</Text>
+            <Text style={s.time}>时长 {clipDuration(videos, clip).toFixed(1)}s</Text>
             <Pressable onPress={save} hitSlop={12}>
               <Text style={s.done}>保存</Text>
             </Pressable>

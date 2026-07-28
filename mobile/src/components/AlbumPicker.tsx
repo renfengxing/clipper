@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Linking,
+  Platform,
   useWindowDimensions
 } from 'react-native'
 import * as MediaLibrary from 'expo-media-library'
@@ -145,12 +146,19 @@ export function AlbumPicker(): JSX.Element {
           continue
         }
 
-        // localUri 才是能读的原始文件；拿不到就必须报错 ——
-        // 退回 a.uri（ph://）只会让播放器黑屏，比直接失败更难查
+        // 取真正能读的源文件路径：
+        //  iOS —— 必须用 localUri，退回 a.uri（ph://）只会让播放器黑屏，比直接失败更难查
+        //  Android —— localUri 是 iOS 专有字段，这里恒为空；a.uri 本身就是 file:// 路径
         const info = await MediaLibrary.getAssetInfoAsync(id, { shouldDownloadFromNetwork: true })
-        const src = info.localUri
+        const src =
+          info.localUri ||
+          (Platform.OS === 'android' && a.uri.startsWith('file://') ? a.uri : null)
         if (!src) {
-          throw new Error(`拿不到「${a.filename}」的文件路径。若相册权限是「选择照片」，请改成「允许完全访问」。`)
+          throw new Error(
+            Platform.OS === 'ios'
+              ? `拿不到「${a.filename}」的文件路径。若相册权限是「选择照片」，请改成「允许完全访问」。`
+              : `拿不到「${a.filename}」的文件路径，请确认已授予「照片和视频」权限。`
+          )
         }
         await FileSystem.copyAsync({ from: src, to: dest })
         out.push({ uri: dest, duration: a.duration })
@@ -190,7 +198,7 @@ export function AlbumPicker(): JSX.Element {
           </Pressable>
         </View>
 
-        {limited && (
+        {limited && Platform.OS === 'ios' && (
           <Pressable style={s.warn} onPress={() => void Linking.openSettings()}>
             <Text style={s.warnText}>
               当前是「选择照片」权限，部分视频会读不出来 · 点这里改成「完全访问」

@@ -13,11 +13,22 @@ export function RecentList({ floating }: Props = {}): JSX.Element | null {
   const videos = useStore((s) => s.videos)
   const openVideoPath = useStore((s) => s.openVideoPath)
   const [recent, setRecent] = useState<string[]>([])
+  /** key → 时间线里存的名字。key 本身是哈希过的文件名，直接显示不是人话 */
+  const [names, setNames] = useState<Record<string, string>>({})
 
   const reload = useCallback((): void => {
     platform()
       .getRecent()
-      .then(setRecent)
+      .then(async (list) => {
+        setRecent(list)
+        const pairs = await Promise.all(
+          list.map(async (k) => {
+            const raw = (await platform().loadData(k)) as { name?: string } | null
+            return [k, raw?.name || ''] as const
+          })
+        )
+        setNames(Object.fromEntries(pairs.filter(([, n]) => n)))
+      })
       .catch(() => {})
   }, [])
 
@@ -89,7 +100,7 @@ export function RecentList({ floating }: Props = {}): JSX.Element | null {
   if (videos.length > 0 || recent.length === 0) return null
 
   const label = (key: string): string =>
-    decodeURIComponent(key.split('/').pop() || key).replace(/\.kkclip$/, '')
+    names[key] || decodeURIComponent(key.split('/').pop() || key).replace(/\.kkclip$/, '')
 
   return (
     <View style={[s.wrap, floating ? s.wrapFloat : s.wrapBlock]}>

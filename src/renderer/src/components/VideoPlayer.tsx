@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useStore, selectActiveVideo } from '@core/store/useStore'
 import { fmtPrecise, fmtMs } from '@core/utils/time'
 import { keyLabel } from '@core/utils/keys'
-import { localToGlobal } from '@core/utils/timeline'
+import { clipGlobalOut, localToGlobal } from '@core/utils/timeline'
 import { basename } from '../utils/media'
 
 interface Props {
@@ -19,7 +19,7 @@ function Subtitle(): JSX.Element | null {
   if (!on) return null
   const active = clips.filter((c) => {
     const gin = localToGlobal(videos, c.videoId, c.in)
-    const gout = localToGlobal(videos, c.videoId, c.out)
+    const gout = clipGlobalOut(videos, c)
     return currentTime >= gin && currentTime <= gout && c.title
   })
   if (active.length === 0) return null

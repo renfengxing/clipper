@@ -24,7 +24,6 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
   titleModalOpen: false,
   resumeAfterModal: false,
   selectedClipId: null,
-  lastClipTrimmed: false,
 
   setMarkIn: () => {
     set({ markIn: get().currentTime })
@@ -68,7 +67,6 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     const endLoc = globalToLocal(videos, hi)
     if (!endLoc) return
     const outLocal = endLoc.local
-    set({ lastClipTrimmed: false })
     if (hi - lo < 0.02) return // 太短
     const cleanTags = Array.from(
       new Set((tags || []).map((x) => x.trim().slice(0, 15)).filter(Boolean))

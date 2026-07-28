@@ -1,7 +1,7 @@
 import { View, Text, Pressable, ScrollView, StyleSheet, Alert } from 'react-native'
 import { useStore } from '@core/store/useStore'
 import { fmtClock } from '@core/utils/time'
-import { ordered, clipGlobalIn } from '@core/utils/timeline'
+import { clipDuration, clipGlobalIn, clipGlobalOut, isSpanning, ordered } from '@core/utils/timeline'
 
 interface Props {
   /** 片段相关的工具（AI 标签 / 报告 / 导出 / 合并）都挂在列表上，随片段走 */
@@ -154,10 +154,14 @@ export function ClipList({
                 </Text>
                 <View style={s.rowMetaLine}>
                   {videos.length > 1 && idx[c.videoId] && (
-                    <Text style={s.badge}>视频{idx[c.videoId]}</Text>
+                    <Text style={s.badge}>
+                      视频{idx[c.videoId]}
+                      {isSpanning(c) && idx[c.endVideoId || ''] ? `→${idx[c.endVideoId || '']}` : ''}
+                    </Text>
                   )}
                   <Text style={s.rowMeta}>
-                    {fmtClock(c.in)} - {fmtClock(c.out)} · {(c.out - c.in).toFixed(1)}s
+                    {fmtClock(clipGlobalIn(videos, c))} - {fmtClock(clipGlobalOut(videos, c))} ·{' '}
+                    {clipDuration(videos, c).toFixed(1)}s
                   </Text>
                 </View>
                 {(c.tags || []).length > 0 && (

@@ -14,6 +14,17 @@
         "NSMicrophoneUsageDescription": "用于语音输入片段解说"
       }
     },
-    "plugins": ["expo-image-picker", "expo-media-library"]
+    "plugins": [
+      "expo-image-picker",
+      "expo-media-library"
+    ],
+    "android": {
+      "package": "com.kuankuan.clipper",
+      "permissions": [
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    }
   }
 }

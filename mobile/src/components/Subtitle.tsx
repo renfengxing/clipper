@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native'
 import { useStore } from '@core/store/useStore'
-import { localToGlobal } from '@core/utils/timeline'
+import { clipGlobalIn, clipGlobalOut, localToGlobal } from '@core/utils/timeline'
 
 /**
  * 播放时在画面下方显示当前命中片段的标题（与 PC 版 #75/#84 一致）。
@@ -15,8 +15,8 @@ export function Subtitle({ bottom = 84 }: { bottom?: number } = {}): JSX.Element
   if (!on) return null
   const hits = clips.filter((c) => {
     if (!c.title) return false
-    const gin = localToGlobal(videos, c.videoId, c.in)
-    const gout = localToGlobal(videos, c.videoId, c.out)
+    const gin = clipGlobalIn(videos, c)
+    const gout = clipGlobalOut(videos, c)
     return currentTime >= gin && currentTime <= gout
   })
   if (hits.length === 0) return null

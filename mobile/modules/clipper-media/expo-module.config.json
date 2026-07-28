@@ -1,6 +1,16 @@
 {
-  "platforms": ["apple"],
+  "platforms": [
+    "apple",
+    "android"
+  ],
   "apple": {
-    "modules": ["ClipperMediaModule"]
+    "modules": [
+      "ClipperMediaModule"
+    ]
+  },
+  "android": {
+    "modules": [
+      "com.kuankuan.clippermedia.ClipperMediaModule"
+    ]
   }
 }

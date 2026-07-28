@@ -289,10 +289,10 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       {/* 编辑条：选中片段后出现，实时显示起止时间，兼作「拖动有没有生效」的反馈 */}
       {sel && (
         <View style={s.editBar}>
-          <Text style={s.editIn}>{fmtMs(sel.in)}</Text>
+          <Text style={s.editIn}>{fmtMs(selGin)}</Text>
           <Text style={s.editArrow}>→</Text>
-          <Text style={s.editOut}>{fmtMs(sel.out)}</Text>
-          <Text style={s.editDur}>{(sel.out - sel.in).toFixed(1)}s</Text>
+          <Text style={s.editOut}>{fmtMs(selGout)}</Text>
+          <Text style={s.editDur}>{(selGout - selGin).toFixed(1)}s</Text>
           {atEdge ? (
             <Text style={s.editWarn}>
               已到时间线{atEdge === 'start' ? '开头' : '结尾'}
@@ -419,7 +419,13 @@ const s = StyleSheet.create({
   wrap: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 2 },
   wrapFloat: { paddingHorizontal: 12, paddingBottom: 0 },
 
-  editBar: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 6, paddingHorizontal: 2 },
+  editBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingBottom: 16, // 手柄向上伸出 11pt，这里要让开，否则「全部/完成」被盖住按不到
+    paddingHorizontal: 2
+  },
   editIn: { color: '#22d3ee', fontSize: 12, fontVariant: ['tabular-nums'] },
   editArrow: { color: '#475569', fontSize: 11 },
   editOut: { color: '#f59e0b', fontSize: 12, fontVariant: ['tabular-nums'] },

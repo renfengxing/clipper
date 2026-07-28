@@ -8,13 +8,16 @@ import type { ExportProgress } from '@core/types'
 const metaCache = new Map<string, { duration: number; fps: number }>()
 
 /**
- * iOS 平台实现。
- * videoRef = 相册资源标识（PHAsset localIdentifier 或 file:// URI）。
- * 关键差异：相册视频旁边写不了 sidecar，所以工程数据一律存 app 沙盒，
- * 以 videoRef 的哈希做文件名 —— 这正是 Platform 端口把 key 抽象出来的原因。
+ * 手机端平台实现（iOS 与 Android 共用）。
+ * videoRef = 导入到沙盒后的 file:// 路径。
+ *
+ * 与桌面的关键差异：相册视频旁边写不了 sidecar，所以工程数据一律存 app 沙盒，
+ * 以 videoRef 的文件名做 key —— 这正是 Platform 端口把 key 抽象出来的原因。
+ * 裁剪/合并/字幕烧录走原生模块 ClipperMedia：
+ * iOS 是 AVFoundation，Android 是 Media3 Transformer，接口同形。
  */
 
-/** 导出去向：系统相册里的这个相册（iOS 没有「选文件夹」的概念） */
+/** 导出去向：系统相册里的这个相册（手机上没有「选文件夹」的概念） */
 const ALBUM_NAME = '宽宽爸视频切片'
 
 const DATA_DIR = FileSystem.documentDirectory + 'clipper/'
@@ -83,7 +86,7 @@ async function deepseek(prompt: string, maxTokens: number): Promise<string> {
   return (data.choices?.[0]?.message?.content || '').trim()
 }
 
-export const iosPlatform: Platform = {
+export const mobilePlatform: Platform = {
   // —— 视频 ——
   async probeVideo(videoRef) {
     // 选片时已缓存；缓存没有则返回 0（时间线会等 onLoad 后再修正）

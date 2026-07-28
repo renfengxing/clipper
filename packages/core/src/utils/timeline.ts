@@ -80,6 +80,14 @@ export function clipSegments(
   return out
 }
 
+/**
+ * 片段时长。必须走全局时间：跨视频片段的 out 属于另一个视频的参照系，
+ * 直接 out-in 会算出负数（曾经在列表里显示成 -15.0s）。
+ */
+export function clipDuration(videos: SourceVideo[], clip: Clip): number {
+  return clipGlobalOut(videos, clip) - clipGlobalIn(videos, clip)
+}
+
 /** 是否跨了视频 */
 export function isSpanning(clip: Clip): boolean {
   return !!clip.endVideoId && clip.endVideoId !== clip.videoId

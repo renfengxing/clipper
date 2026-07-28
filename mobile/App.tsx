@@ -17,7 +17,7 @@ import { platform } from '@core/ports'
 import { startAutoSave } from '@core/persist/autoSave'
 import { ClipperMedia } from './modules/clipper-media'
 import { fmtClock, fmtMs } from '@core/utils/time'
-import { totalDuration, globalToLocal } from '@core/utils/timeline'
+import { totalDuration } from '@core/utils/timeline'
 import { TitleSheet } from './src/components/TitleSheet'
 import { Timeline } from './src/components/Timeline'
 import { ClipList } from './src/components/ClipList'
@@ -216,18 +216,8 @@ export default function App(): JSX.Element {
 
   const onMarkPress = (): void => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    if (markIn == null) return setMarkIn()
-    setMarkOut()
-    // 跨视频标记会被悄悄截断在前一个视频末尾，明说一声
-    const st = useStore.getState()
-    const a = globalToLocal(st.videos, Math.min(st.markIn ?? 0, st.markOut ?? 0))
-    const b = globalToLocal(st.videos, Math.max(st.markIn ?? 0, st.markOut ?? 0))
-    if (a && b && a.video.id !== b.video.id) {
-      Alert.alert(
-        '标记跨过了视频边界',
-        `片段不能跨视频，终点会截在「${a.video.fileName}」的末尾。\n\n剩下的部分请在下一个视频里单独标一段。`
-      )
-    }
+    if (markIn == null) setMarkIn()
+    else setMarkOut()
   }
 
   const videoEl = active ? (

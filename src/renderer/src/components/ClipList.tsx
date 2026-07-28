@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '@core/store/useStore'
 import { fmtClock } from '@core/utils/time'
-import { ordered, clipGlobalIn } from '@core/utils/timeline'
+import { clipDuration, clipGlobalIn, clipGlobalOut, ordered } from '@core/utils/timeline'
 
 interface Props {
   width: number
@@ -253,8 +253,8 @@ export function ClipList({ width, onCollapse }: Props): JSX.Element {
                       </span>
                     )}
                     <span>
-                      {fmtClock(c.in)} - {fmtClock(c.out)}
-                      <span className="ml-2 text-slate-600">({(c.out - c.in).toFixed(1)}s)</span>
+                      {fmtClock(clipGlobalIn(videos, c))} - {fmtClock(clipGlobalOut(videos, c))}
+                      <span className="ml-2 text-slate-600">({clipDuration(videos, c).toFixed(1)}s)</span>
                     </span>
                   </div>
 

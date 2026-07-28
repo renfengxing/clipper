@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="/Users/helijun/video-clipper/mobile/modules/clipper-media/android"
+    name=":clipper-media"
+    type="LIBRARY"
+    maven="com.kuankuan.clippermedia:clipper-media:"
+    agpVersion="8.2.1"
+    buildFolder="build"
+    bootClassPath="/Users/helijun/Library/Android/sdk/platforms/android-35/android.jar:/Users/helijun/Library/Android/sdk/build-tools/34.0.0/core-lambda-stubs.jar"
+    javaSourceLevel="17"
+    compileTarget="android-35"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>

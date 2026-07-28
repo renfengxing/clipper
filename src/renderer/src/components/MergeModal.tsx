@@ -4,7 +4,7 @@ import type { ExportProgress } from '@core/types'
 import { APP_NAME } from '@core/constants'
 import { uuid } from '@core/utils/id'
 import { dirOf, basename } from '../utils/media'
-import { ordered, clipSegments } from '@core/utils/timeline'
+import { clipDuration, clipSegments, ordered } from '@core/utils/timeline'
 
 export function MergeModal(): JSX.Element | null {
   const open = useStore((s) => s.mergeOpen)
@@ -85,7 +85,7 @@ export function MergeModal(): JSX.Element | null {
       const probe = await window.api.probeVideo(outPath)
       let acc = 0
       const mclips = selected.map((c, i) => {
-        const len = c.out - c.in
+        const len = clipDuration(videos, c)
         const clip = { id: uuid(), in: acc, out: acc + len, title: c.title, order: i, created_at: iso, tags: c.tags || [] }
         acc += len
         return clip

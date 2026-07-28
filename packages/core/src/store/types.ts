@@ -56,7 +56,6 @@ export interface ClipsSlice {
   titleModalOpen: boolean
   resumeAfterModal: boolean
   selectedClipId: string | null
-  lastClipTrimmed: boolean // 上一个片段因跨视频被截断（界面据此提示）
   setMarkIn: () => void
   setMarkOut: () => void
   clearMarks: () => void

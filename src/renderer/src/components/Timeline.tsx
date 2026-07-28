@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '@core/store/useStore'
 import { fmtClock, fmtPrecise, fmtMs } from '@core/utils/time'
 import { keyLabel } from '@core/utils/keys'
-import { ordered, totalDuration, videoOffset, localToGlobal, clipGlobalIn, clipGlobalOut, isSpanning } from '@core/utils/timeline'
+import { ordered, totalDuration, videoOffset, localToGlobal, clipGlobalIn, clipGlobalOut, clipDuration, isSpanning } from '@core/utils/timeline'
 
 const MIN_ZOOM = 1
 const MAX_ZOOM = 32
@@ -388,8 +388,8 @@ export function Timeline(): JSX.Element {
               (() => {
                 const clip = clips.find((c) => c.id === selectedClipId)
                 if (!clip) return null
-                const left = (localToGlobal(videos, clip.videoId, clip.in) / total) * 100
-                const width = Math.max(0.5, ((clip.out - clip.in) / total) * 100)
+                const left = (clipGlobalIn(videos, clip) / total) * 100
+                const width = Math.max(0.5, (clipDuration(videos, clip) / total) * 100)
                 return (
                   <div className="absolute top-0 bottom-0 z-20" style={{ left: `${left}%`, width: `${width}%` }}>
                     <div className="absolute inset-y-1 inset-x-1 cursor-grab active:cursor-grabbing" title="拖动平移整段" onPointerDown={(e) => onEditDown(e, 'move')} onPointerMove={onEditMove} onPointerUp={onEditUp} />

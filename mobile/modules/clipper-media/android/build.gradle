@@ -1,0 +1,35 @@
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+group = 'com.kuankuan.clippermedia'
+version = '1.0.0'
+
+android {
+  namespace 'com.kuankuan.clippermedia'
+  compileSdk 35
+
+  defaultConfig {
+    minSdk 23
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:${project.properties['kotlinVersion'] ?: '1.9.24'}"
+
+  // Media3 Transformer：裁剪、拼接、字幕/水印烧录都靠它。
+  // 不用 ffmpeg-kit —— 它已停止分发预编译产物，自行编译成本太高。
+  def media3 = '1.4.1'
+  implementation "androidx.media3:media3-transformer:$media3"
+  implementation "androidx.media3:media3-effect:$media3"
+  implementation "androidx.media3:media3-common:$media3"
+  implementation 'androidx.core:core-ktx:1.13.1'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+}

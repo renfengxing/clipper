@@ -13,8 +13,8 @@ import { useStore } from '@core/store/useStore'
 import { platform } from '@core/ports'
 import { APP_NAME } from '@core/constants'
 import { fmtClock } from '@core/utils/time'
-import { localToGlobal, clipSegments } from '@core/utils/timeline'
-import { exportIdOf } from '../platform/ios'
+import { clipDuration, clipSegments, localToGlobal } from '@core/utils/timeline'
+import { exportIdOf } from '../platform/mobile'
 
 type Mode = 'export' | 'merge'
 
@@ -123,7 +123,7 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
 
   if (!mode) return <></>
 
-  const total = picked.reduce((n, c) => n + (c.out - c.in), 0)
+  const total = picked.reduce((n, c) => n + clipDuration(videos, c), 0)
 
   return (
     <Modal
@@ -173,7 +173,7 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
                       {i + 1}. {c.title || '未命名片段'}
                     </Text>
                     <Text style={s.rowSub}>
-                      {(c.out - c.in).toFixed(1)}s
+                      {clipDuration(videos, c).toFixed(1)}s
                       {(c.tags || []).length ? ` · ${(c.tags || []).join(' ')}` : ''}
                       {exportHistory[exportIdOf(toInput(c))] ? ' · 已导出' : ''}
                     </Text>
