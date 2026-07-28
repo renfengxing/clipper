@@ -23,6 +23,11 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
   const clearActiveTags = useStore((s) => s.clearActiveTags)
   const tagFilterMode = useStore((s) => s.tagFilterMode)
   const aiTagging = useStore((s) => s.aiTagging)
+  const checkedIds = useStore((s) => s.checkedIds)
+  const toggleChecked = useStore((s) => s.toggleChecked)
+  const setChecked = useStore((s) => s.setChecked)
+  const showCheckedOnly = useStore((s) => s.showCheckedOnly)
+  const setShowCheckedOnly = useStore((s) => s.setShowCheckedOnly)
 
   const idx: Record<string, number> = {}
   ordered(videos).forEach((v, i) => (idx[v.id] = i + 1))
@@ -37,6 +42,11 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
         : activeTags.some((t) => ct.includes(t))
     })
   }
+  if (showCheckedOnly) visible = visible.filter((c) => checkedIds.includes(c.id))
+
+  // 导出/合并只作用于勾选项，和 PC 版一致
+  const allVisibleChecked =
+    visible.length > 0 && visible.every((c) => checkedIds.includes(c.id))
 
   const confirmDelete = (id: string, title: string): void => {
     Alert.alert('删除片段', title || '未命名片段', [
@@ -61,8 +71,31 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
         <View style={s.toolRow}>
           {tool('🏷 标签', onAiTag, aiTagging)}
           {tool('📋 报告', onReport)}
-          {tool('📤 导出', onExport)}
+          {tool(`📤 导出${checkedIds.length ? ` ${checkedIds.length}` : ''}`, onExport)}
           {tool('🎬 合并', onMerge)}
+        </View>
+      )}
+
+      {clips.length > 0 && (
+        <View style={s.pickRow}>
+          <Pressable
+            onPress={() =>
+              setChecked(
+                allVisibleChecked
+                  ? checkedIds.filter((id) => !visible.some((c) => c.id === id))
+                  : Array.from(new Set([...checkedIds, ...visible.map((c) => c.id)]))
+              )
+            }
+            hitSlop={6}
+          >
+            <Text style={s.pickAction}>{allVisibleChecked ? '取消全选' : '全选'}</Text>
+          </Pressable>
+          <Pressable onPress={() => setShowCheckedOnly(!showCheckedOnly)} hitSlop={6}>
+            <Text style={[s.pickAction, showCheckedOnly && s.pickActionOn]}>
+              {showCheckedOnly ? '✓ 仅看已选' : '仅看已选'}
+            </Text>
+          </Pressable>
+          <Text style={s.pickCount}>已选 {checkedIds.length}</Text>
         </View>
       )}
 
@@ -99,6 +132,12 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
               onLongPress={() => confirmDelete(c.id, c.title)}
               style={[s.row, c.id === selectedClipId && s.rowOn]}
             >
+              {/* 勾选区单独吃点击，免得选中片段时又触发循环播放 */}
+              <Pressable onPress={() => toggleChecked(c.id)} hitSlop={8} style={s.boxHit}>
+                <View style={[s.box, checkedIds.includes(c.id) && s.boxOn]}>
+                  {checkedIds.includes(c.id) && <Text style={s.tick}>✓</Text>}
+                </View>
+              </Pressable>
               <Text style={s.rowIdx}>{i + 1}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={s.rowTitle} numberOfLines={2}>
@@ -132,6 +171,29 @@ export function ClipList({ onAiTag, onReport, onExport, onMerge }: Props = {}): 
 }
 
 const s = StyleSheet.create({
+  pickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 2
+  },
+  pickAction: { color: '#22d3ee', fontSize: 12 },
+  pickActionOn: { fontWeight: '600' },
+  pickCount: { color: '#64748b', fontSize: 11, marginLeft: 'auto' },
+  boxHit: { paddingVertical: 4, paddingRight: 2 },
+  box: {
+    width: 19,
+    height: 19,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#475569',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  boxOn: { backgroundColor: '#0891b2', borderColor: '#22d3ee' },
+  tick: { color: '#fff', fontSize: 11, fontWeight: '700' },
   toolRow: {
     flexDirection: 'row',
     gap: 6,

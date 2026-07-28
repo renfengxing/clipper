@@ -34,7 +34,7 @@ export function Controls({
         </Pressable>
       )}
       <Pressable style={[s.btn, floating && s.btnFloat]} onPress={onTools}>
-        <Text style={[s.txt, floating && s.txtFloat]}>⋯</Text>
+        <Text style={[s.txt, floating && s.txtFloat]}>⚙︎</Text>
       </Pressable>
       {!compact && (
         <Text style={s.hint} numberOfLines={1}>

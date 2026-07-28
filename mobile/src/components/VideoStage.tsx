@@ -74,6 +74,8 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
   const originRef = useRef({ x: 0, y: 0 })
   const insetRef = useRef(bottomInset)
   insetRef.current = bottomInset
+  /** 本次触摸是不是从底部死区起手的 */
+  const startedLowRef = useRef(false)
 
   /**
    * 一律用 pageX/pageY 换算，绝不能用 locationX/locationY ——
@@ -133,8 +135,19 @@ export function VideoStage({ children, onFlick, enabled, bottomInset = 0 }: Prop
 
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: (e) => !inDeadZone(e),
-      onMoveShouldSetPanResponder: (e, g) => !inDeadZone(e) && (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
+      // 起手点决定归属，不能用当前位置判断：
+      // 从底边往斜上滑时，等我们收到 move 手指已经离开死区了，
+      // 于是 VideoStage 中途接管、起了长按计时器 —— 这才是斜上滑仍会弹倍率条的原因。
+      // onStartShouldSetPanResponder 在每次触摸开始时都会被调用（即便最终没拿到响应者），
+      // 正好用来记住起手位置。
+      onStartShouldSetPanResponder: (e) => {
+        startedLowRef.current = inDeadZone(e)
+        return !startedLowRef.current
+      },
+      onMoveShouldSetPanResponder: (e, g) =>
+        !startedLowRef.current &&
+        !inDeadZone(e) &&
+        (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4),
       onPanResponderGrant: (e) => {
         if (!cbRef.current.enabled) return
         holdRef.current = false

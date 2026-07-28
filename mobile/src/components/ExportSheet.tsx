@@ -42,13 +42,9 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
   const [progress, setProgress] = useState<{ index: number; total: number; name: string } | null>(null)
   const [result, setResult] = useState<string | null>(null)
 
-  // 打开时默认全选
+  // 不再自动全选：导出/合并只作用于片段列表里勾选的那些（与 PC 版一致）
   useEffect(() => {
-    if (mode) {
-      setResult(null)
-      setChecked(clips.map((c) => c.id))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (mode) setResult(null)
   }, [mode])
 
   useEffect(() => {
@@ -148,6 +144,12 @@ export function ExportSheet({ mode, onClose }: Props): JSX.Element {
               </Pressable>
             </View>
           </View>
+
+          {picked.length === 0 && (
+            <Text style={s.needPick}>
+              先在片段列表里勾选要{mode === 'export' ? '导出' : '合并'}的片段，这里也可以直接勾。
+            </Text>
+          )}
 
           <ScrollView style={s.list}>
             {sorted.map((c, i) => {
@@ -276,5 +278,12 @@ const s = StyleSheet.create({
   goText: { color: '#fff', fontSize: 15, fontWeight: '500' },
   runRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 13 },
   runText: { color: '#cbd5e1', fontSize: 13 },
-  result: { color: '#22d3ee', fontSize: 13, textAlign: 'center', marginTop: 11 }
+  result: { color: '#22d3ee', fontSize: 13, textAlign: 'center', marginTop: 11 },
+  needPick: {
+    color: '#fcd34d',
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 16,
+    paddingBottom: 6
+  }
 })
