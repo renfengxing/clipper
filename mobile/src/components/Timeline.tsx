@@ -159,11 +159,11 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       {/* 轨道内的装饰层一律 pointerEvents=none：
           RN 的 locationX 是相对「触摸目标」算的，若点中的是片段色条这类子 View，
           拿到的就是相对色条自身的坐标，换算出的时间完全不对 —— 表现为点片段跳到开头 */}
-      {/* 轨道视觉上很细，但用 hitSlop 把可触区域上下各撑开 —— 否则手指稍偏就落到
-          外层 padding 上，touch 冒泡给 VideoStage 变成「按住调速」 */}
+      {/* 轨道视觉上很细，用 hitSlop 把可触区域上下撑开。
+          左右不撑：那两侧换算出的时间是负数或超尾，会被夹到 0 —— 表现为「点一下跳回开头」 */}
       <View
         style={[s.track, floating && s.trackFloat]}
-        hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}
+        hitSlop={{ top: 14, bottom: 14, left: 0, right: 0 }}
         onLayout={onLayout}
         {...pan.panHandlers}
       >

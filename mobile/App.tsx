@@ -32,8 +32,8 @@ import { Subtitle } from './src/components/Subtitle'
 import { RecentList } from './src/components/RecentList'
 import { EditClipSheet } from './src/components/EditClipSheet'
 
-/** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop 余量 */
-const LAND_BOTTOM_ZONE = 76
+/** 横屏底部留给时间线的高度：轨道 20 + 上下 padding + hitSlop，再留足余量 */
+const LAND_BOTTOM_ZONE = 96
 
 export default function App(): JSX.Element {
   const { width, height } = useWindowDimensions()
