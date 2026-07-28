@@ -130,6 +130,9 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   /** 按下手柄那一刻的起止时间，拖动期间以它为基准 */
   const dragBaseRef = useRef<{ in: number; out: number } | null>(null)
   const [dragging, setDragging] = useState<'in' | 'out' | null>(null)
+  /** 拖到所属视频的头/尾了。片段不能跨视频（见 core 的 addClip），到此为止 */
+  const [atEdge, setAtEdge] = useState<'start' | 'end' | null>(null)
+  const edgeBuzzRef = useRef(false)
 
   /**
    * 起止手柄。位置用「按下时的时间 + 位移换算的时间差」算，
@@ -144,6 +147,8 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       onPanResponderGrant: () => {
         ref.current.pause() // 播放头会跟拖动抢位置
         ref.current.clearPreview()
+        setAtEdge(null)
+        edgeBuzzRef.current = false
         const c = ref.current.clips.find((x) => x.id === selectedIdRef.current)
         dragBaseRef.current = c ? { in: c.in, out: c.out } : null
         setDragging(which)
@@ -159,9 +164,24 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         const off = videoOffset(vs, c.videoId)
         const v = vs.find((x) => x.id === c.videoId)
         const maxLocal = v?.duration && v.duration > 0 ? v.duration : base.out + 3600
-        const nin = which === 'in' ? Math.max(0, Math.min(base.in + delta, base.out - 0.1)) : base.in
+        const wantIn = base.in + delta
+        const wantOut = base.out + delta
+        const nin = which === 'in' ? Math.max(0, Math.min(wantIn, base.out - 0.1)) : base.in
         const nout =
-          which === 'out' ? Math.min(maxLocal, Math.max(base.out + delta, base.in + 0.1)) : base.out
+          which === 'out' ? Math.min(maxLocal, Math.max(wantOut, base.in + 0.1)) : base.out
+
+        // 顶到所属视频的头或尾：给一次震动 + 标记，别让人以为是拖不动
+        const hitStart = which === 'in' && wantIn < 0
+        const hitEnd = which === 'out' && wantOut > maxLocal
+        const edge = hitStart ? 'start' : hitEnd ? 'end' : null
+        setAtEdge(edge)
+        if (edge && !edgeBuzzRef.current) {
+          edgeBuzzRef.current = true
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        } else if (!edge) {
+          edgeBuzzRef.current = false
+        }
+
         ref.current.updateClipTimes(c.id, nin, nout)
         const g0 = off + (which === 'in' ? nin : nout)
         ref.current.seek(g0)
@@ -185,9 +205,13 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       },
       onPanResponderRelease: () => {
         setDragging(null)
+        setAtEdge(null)
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       },
-      onPanResponderTerminate: () => setDragging(null)
+      onPanResponderTerminate: () => {
+        setDragging(null)
+        setAtEdge(null)
+      }
     })
 
   const inPan = useRef(makeHandle('in')).current
@@ -268,8 +292,16 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           <Text style={s.editArrow}>→</Text>
           <Text style={s.editOut}>{fmtMs(sel.out)}</Text>
           <Text style={s.editDur}>{(sel.out - sel.in).toFixed(1)}s</Text>
-          {selL < 0 && <Text style={s.editEdge}>◀</Text>}
-          {selR > width && <Text style={s.editEdge}>▶</Text>}
+          {atEdge ? (
+            <Text style={s.editWarn}>
+              已到本视频{atEdge === 'start' ? '开头' : '结尾'} · 片段不能跨视频
+            </Text>
+          ) : (
+            <>
+              {selL < 0 && <Text style={s.editEdge}>◀</Text>}
+              {selR > width && <Text style={s.editEdge}>▶</Text>}
+            </>
+          )}
           {zoom && (
             <Pressable onPress={() => setZoom(null)} hitSlop={8}>
               <Text style={s.editAction}>全部</Text>
@@ -387,6 +419,7 @@ const s = StyleSheet.create({
   editOut: { color: '#f59e0b', fontSize: 12, fontVariant: ['tabular-nums'] },
   editDur: { color: '#94a3b8', fontSize: 11, marginLeft: 2 },
   editEdge: { color: '#f59e0b', fontSize: 11 },
+  editWarn: { color: '#fbbf24', fontSize: 10, flexShrink: 1 },
   editAction: { color: '#e2e8f0', fontSize: 12, marginLeft: 10 },
 
   segRow: { height: 20, marginBottom: 4 },

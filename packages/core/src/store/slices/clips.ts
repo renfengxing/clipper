@@ -24,6 +24,7 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
   titleModalOpen: false,
   resumeAfterModal: false,
   selectedClipId: null,
+  lastClipTrimmed: false,
 
   setMarkIn: () => {
     set({ markIn: get().currentTime })
@@ -64,8 +65,11 @@ export const createClipsSlice: StateCreator<AppState, [], [], ClipsSlice> = (set
     if (!loc) return
     const offset = videoOffset(videos, loc.video.id)
     const inLocal = lo - offset
-    // 片段不能跨文件：出点钳到所属视频末尾
-    const outLocal = Math.min(hi - offset, loc.video.duration || hi - offset)
+    // 片段不能跨文件（片段随视频存 sidecar，跨了就没法归属）：出点钳到所属视频末尾
+    const wantOut = hi - offset
+    const outLocal = Math.min(wantOut, loc.video.duration || wantOut)
+    // 被钳过说明标记跨过了视频边界，记下来让界面能提示，别悄悄截断
+    set({ lastClipTrimmed: outLocal < wantOut - 0.05 })
     if (outLocal - inLocal < 0.02) return // 太短或跨界
     const cleanTags = Array.from(
       new Set((tags || []).map((x) => x.trim().slice(0, 15)).filter(Boolean))
