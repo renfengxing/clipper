@@ -1,12 +1,16 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, Text, StyleSheet, PanResponder, LayoutChangeEvent, Pressable, Alert } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { useStore } from '@core/store/useStore'
+import { fmtMs } from '@core/utils/time'
 import { ordered, totalDuration, videoOffset, localToGlobal } from '@core/utils/timeline'
 
 /**
- * 手机时间线：多视频分段 + 片段色条 + 待标记高亮 + 游标。
- * 触摸拖动 = scrub（手指按下即停止片段循环，便于跨视频）。
+ * 手机时间线：多视频分段 + 片段色条 + 待标记高亮 + 游标 + 选中片段的起止手柄。
+ *
+ * 选中片段后会自动放大到该片段附近。原因：一场比赛动辄几十分钟，
+ * 十几秒的片段在整条轨道上不到一个像素，手柄既叠在一起也拖不准 ——
+ * 放大的是时间线本身，不是另起一个控件，「全部」一点即可退回全长。
  */
 interface TimelineProps {
   floating?: boolean
@@ -14,7 +18,7 @@ interface TimelineProps {
 
 /** 超过这个位移才算拖拽，否则按「点击」处理 */
 const DRAG_PX = 6
-/** 起止手柄的宽度（同时也是两个手柄的最小间距） */
+/** 起止手柄的宽度 */
 const HANDLE = 30
 
 export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
@@ -38,7 +42,32 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const widthRef = useRef(0)
   const total = totalDuration(videos)
 
-  // PanResponder 只创建一次，用 ref 读取每次渲染的最新值
+  const sel = clips.find((c) => c.id === selectedClipId) || null
+  const selGin = sel ? localToGlobal(videos, sel.videoId, sel.in) : 0
+  const selGout = sel ? localToGlobal(videos, sel.videoId, sel.out) : 0
+
+  // 可视时间窗口。null = 看全长
+  const [zoom, setZoom] = useState<{ start: number; end: number } | null>(null)
+
+  // 只在「选中的片段变了」时重设窗口 —— 拖动过程中不能跟着变，否则标尺自己在动
+  useEffect(() => {
+    if (!selectedClipId) {
+      setZoom(null)
+      return
+    }
+    const c = clips.find((x) => x.id === selectedClipId)
+    if (!c) return
+    const gin = localToGlobal(videos, c.videoId, c.in)
+    const gout = localToGlobal(videos, c.videoId, c.out)
+    const pad = Math.max(3, (gout - gin) * 1.2)
+    setZoom({ start: Math.max(0, gin - pad), end: Math.min(total || gout + pad, gout + pad) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClipId])
+
+  const viewStart = zoom ? zoom.start : 0
+  const viewEnd = zoom ? zoom.end : total
+  const viewSpan = Math.max(0.001, viewEnd - viewStart)
+
   const ref = useRef({
     total,
     clips,
@@ -49,7 +78,9 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     pause,
     resume,
     updateClipTimes,
-    deselectClip
+    deselectClip,
+    viewStart,
+    viewSpan
   })
   ref.current = {
     total,
@@ -61,10 +92,10 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     pause,
     resume,
     updateClipTimes,
-    deselectClip
+    deselectClip,
+    viewStart,
+    viewSpan
   }
-  /** 按下时是否在播 —— 拖完用它决定要不要续播 */
-  const wasPlayingRef = useRef(false)
 
   const onLayout = (e: LayoutChangeEvent): void => {
     const w = e.nativeEvent.layout.width
@@ -72,11 +103,12 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     setWidth(w)
   }
 
+  /** 轨道内 x → 全局时间（按当前可视窗口换算） */
   const timeAtX = (x: number): number | null => {
     const w = widthRef.current
-    const t = ref.current.total
-    if (w <= 0 || t <= 0) return null
-    return Math.max(0, Math.min(t, (x / w) * t))
+    if (w <= 0 || ref.current.total <= 0) return null
+    const t = ref.current.viewStart + (x / w) * ref.current.viewSpan
+    return Math.max(0, Math.min(ref.current.total, t))
   }
 
   /** 该全局时间落在哪个片段上（用于区分「点片段」和「拖轨道」） */
@@ -92,15 +124,17 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
   const movedRef = useRef(false)
   const hitClipRef = useRef<string | null>(null)
+  const wasPlayingRef = useRef(false)
   const selectedIdRef = useRef<string | null>(null)
   selectedIdRef.current = selectedClipId
   /** 按下手柄那一刻的起止时间，拖动期间以它为基准 */
   const dragBaseRef = useRef<{ in: number; out: number } | null>(null)
+  const [dragging, setDragging] = useState<'in' | 'out' | null>(null)
 
   /**
-   * 选中片段后，两端直接长出手柄。
-   * 做在时间线本身而不是另起一个控件：那样既多一层概念，
-   * 又丢掉了「随时拖到任意时间」的能力。
+   * 起止手柄。位置用「按下时的时间 + 位移换算的时间差」算，
+   * 不依赖任何绝对坐标 —— measureInWindow 的原点不保证可靠，
+   * 一旦为 0，绝对算法会把时间直接算到轨道末端。
    */
   const makeHandle = (which: 'in' | 'out'): ReturnType<typeof PanResponder.create> =>
     PanResponder.create({
@@ -108,33 +142,34 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        // 播放头会跟拖动抢位置，先停住并退出片段循环
-        ref.current.pause()
+        ref.current.pause() // 播放头会跟拖动抢位置
         ref.current.clearPreview()
         const c = ref.current.clips.find((x) => x.id === selectedIdRef.current)
         dragBaseRef.current = c ? { in: c.in, out: c.out } : null
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+        setDragging(which)
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
       },
-      // 用「按下那一刻的时间 + 手指位移换算出的时间差」来算，
-      // 不依赖任何绝对坐标 —— measureInWindow 拿到的原点不一定可靠，
-      // 一旦为 0，绝对算法会把时间直接算到轨道末端（表现为一拖就飞出片段范围）
       onPanResponderMove: (_e, g) => {
-        const { clips: cs, videos: vs, total: tt } = ref.current
+        const { clips: cs, videos: vs } = ref.current
         const base = dragBaseRef.current
         const c = cs.find((x) => x.id === selectedIdRef.current)
         const w = widthRef.current
-        if (!c || !base || w <= 0 || tt <= 0) return
-        const delta = (g.dx / w) * tt
+        if (!c || !base || w <= 0) return
+        const delta = (g.dx / w) * ref.current.viewSpan
         const off = videoOffset(vs, c.videoId)
         const v = vs.find((x) => x.id === c.videoId)
         const maxLocal = v?.duration && v.duration > 0 ? v.duration : base.out + 3600
-        const nin =
-          which === 'in' ? Math.max(0, Math.min(base.in + delta, base.out - 0.1)) : base.in
+        const nin = which === 'in' ? Math.max(0, Math.min(base.in + delta, base.out - 0.1)) : base.in
         const nout =
           which === 'out' ? Math.min(maxLocal, Math.max(base.out + delta, base.in + 0.1)) : base.out
         ref.current.updateClipTimes(c.id, nin, nout)
         ref.current.seek(off + (which === 'in' ? nin : nout))
-      }
+      },
+      onPanResponderRelease: () => {
+        setDragging(null)
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+      },
+      onPanResponderTerminate: () => setDragging(null)
     })
 
   const inPan = useRef(makeHandle('in')).current
@@ -177,7 +212,6 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         if (!movedRef.current && hitClipRef.current) {
           ref.current.selectClip(hitClipRef.current)
         } else if (movedRef.current && wasPlayingRef.current) {
-          // 拖完续播，按拖之前的方向和倍率
           ref.current.resume()
         }
         hitClipRef.current = null
@@ -190,38 +224,49 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
   if (videos.length === 0 || total <= 0) return null
 
-  const pct = (v: number): number => (v / total) * width
+  /** 全局时间 → 轨道内 x（按当前可视窗口） */
+  const pct = (v: number): number => ((v - viewStart) / viewSpan) * width
   const segs = ordered(videos)
 
-  const sel = clips.find((c) => c.id === selectedClipId) || null
-  let selL = 0
-  let selR = 0
-  if (sel) {
-    selL = pct(localToGlobal(videos, sel.videoId, sel.in))
-    selR = pct(localToGlobal(videos, sel.videoId, sel.out))
-    if (selR - selL < HANDLE) {
-      // 太窄就把两个手柄往两边撑开，位置只是视觉上的，拖动仍按真实时间换算
-      const mid = (selL + selR) / 2
-      selL = mid - HANDLE / 2
-      selR = mid + HANDLE / 2
-    }
-    selL = Math.max(HANDLE / 2, Math.min(selL, width - HANDLE / 2))
-    selR = Math.max(HANDLE / 2, Math.min(selR, width - HANDLE / 2))
+  // 手柄位置。片段窄到两手柄会叠时才撑开，放大之后基本用不上这条兜底
+  let selL = pct(selGin)
+  let selR = pct(selGout)
+  if (sel && selR - selL < HANDLE * 0.7) {
+    const mid = (selL + selR) / 2
+    selL = mid - HANDLE * 0.35
+    selR = mid + HANDLE * 0.35
   }
 
   return (
     <View style={[s.wrap, floating && s.wrapFloat]}>
+      {/* 编辑条：选中片段后出现，实时显示起止时间，兼作「拖动有没有生效」的反馈 */}
+      {sel && (
+        <View style={s.editBar}>
+          <Text style={s.editIn}>{fmtMs(sel.in)}</Text>
+          <Text style={s.editArrow}>→</Text>
+          <Text style={s.editOut}>{fmtMs(sel.out)}</Text>
+          <Text style={s.editDur}>{(sel.out - sel.in).toFixed(1)}s</Text>
+          {zoom && (
+            <Pressable onPress={() => setZoom(null)} hitSlop={8}>
+              <Text style={s.editAction}>全部</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={() => deselectClip()} hitSlop={8}>
+            <Text style={s.editAction}>完成</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* 视频分段标签：横屏浮层里不显示 —— 太占高度，且视频的增删排序已经
           有「视频 N」面板可用，轨道上的分界线也仍然标出了各段边界 */}
-      {!floating && segs.length > 1 && (
+      {!floating && !sel && segs.length > 1 && (
         <View style={[s.segRow, { width }]}>
           {segs.map((v, i) => (
-            // 点=跳到该视频开头；长按=从时间线移除（片段仍随视频保留）
             <Pressable
               key={v.id}
               style={[
                 s.seg,
-                { left: pct(videoOffset(videos, v.id)), width: Math.max(22, pct(v.duration)) },
+                { left: pct(videoOffset(videos, v.id)), width: Math.max(22, pct(v.duration) - pct(0)) },
                 v.id === activeVideoId && s.segActive
               ]}
               onPress={() => {
@@ -247,9 +292,6 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         </View>
       )}
 
-      {/* 轨道内的装饰层一律 pointerEvents=none：
-          RN 的 locationX 是相对「触摸目标」算的，若点中的是片段色条这类子 View，
-          拿到的就是相对色条自身的坐标，换算出的时间完全不对 —— 表现为点片段跳到开头 */}
       {/* 轨道视觉上很细，用 hitSlop 把可触区域上下撑开。
           左右不撑：那两侧换算出的时间是负数或超尾，会被夹到 0 —— 表现为「点一下跳回开头」 */}
       <View
@@ -258,54 +300,42 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         onLayout={onLayout}
         {...pan.panHandlers}
       >
-        {/* 分段分界线 */}
-        {segs.slice(1).map((v) => (
-          <View
-            key={v.id}
-            pointerEvents="none"
-            style={[s.divider, { left: pct(videoOffset(videos, v.id)) }]}
-          />
-        ))}
+        {/* 色条层单独裁剪：轨道本身不能 overflow:hidden，
+            否则伸出轨道上下的手柄会被裁掉，连触摸都收不到 */}
+        <View style={s.clipLayer} pointerEvents="none">
+          {segs.slice(1).map((v) => (
+            <View key={v.id} style={[s.divider, { left: pct(videoOffset(videos, v.id)) }]} />
+          ))}
 
-        {/* 已存片段色条 */}
-        {clips.map((c) => {
-          const left = pct(localToGlobal(videos, c.videoId, c.in))
-          const w = Math.max(3, pct(c.out - c.in))
-          const on = c.id === selectedClipId
-          return (
+          {clips.map((c) => {
+            const left = pct(localToGlobal(videos, c.videoId, c.in))
+            const w = Math.max(2, pct(localToGlobal(videos, c.videoId, c.out)) - left)
+            const on = c.id === selectedClipId
+            return <View key={c.id} style={[s.clip, { left, width: w }, on && s.clipActive]} />
+          })}
+
+          {markIn != null && markOut == null && currentTime > markIn && (
             <View
-              key={c.id}
-              pointerEvents="none"
-              style={[s.clip, { left, width: w }, on && s.clipActive]}
+              style={[s.pending, { left: pct(markIn), width: Math.max(2, pct(currentTime) - pct(markIn)) }]}
             />
-          )
-        })}
+          )}
 
-        {/* 标记中：起点 → 当前 的黄色高亮 */}
-        {markIn != null && markOut == null && currentTime > markIn && (
-          <View
-            pointerEvents="none"
-            style={[s.pending, { left: pct(markIn), width: Math.max(2, pct(currentTime - markIn)) }]}
-          />
-        )}
+          <View style={[s.cursor, { left: Math.max(0, pct(currentTime) - 1) }]} />
+        </View>
 
-        {/* 游标 */}
-        <View pointerEvents="none" style={[s.cursor, { left: Math.max(0, pct(currentTime) - 1) }]} />
-
-        {/* 选中片段的起止手柄。片段很窄时两个手柄会叠在一起，
-            所以强制至少留出一个手柄的间距，保证都抓得住 */}
+        {/* 选中片段的起止手柄 */}
         {sel && (
           <>
             <View
-              style={[s.handle, s.handleIn, { left: selL - HANDLE / 2 }]}
-              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={[s.handle, s.handleIn, dragging === 'in' && s.handleOn, { left: selL - HANDLE / 2 }]}
+              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
               {...inPan.panHandlers}
             >
               <Text style={s.handleText}>‖</Text>
             </View>
             <View
-              style={[s.handle, s.handleOut, { left: selR - HANDLE / 2 }]}
-              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={[s.handle, s.handleOut, dragging === 'out' && s.handleOn, { left: selR - HANDLE / 2 }]}
+              hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }}
               {...outPan.panHandlers}
             >
               <Text style={s.handleText}>‖</Text>
@@ -320,6 +350,14 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 const s = StyleSheet.create({
   wrap: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 2 },
   wrapFloat: { paddingHorizontal: 12, paddingBottom: 0 },
+
+  editBar: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingBottom: 6, paddingHorizontal: 2 },
+  editIn: { color: '#22d3ee', fontSize: 12, fontVariant: ['tabular-nums'] },
+  editArrow: { color: '#475569', fontSize: 11 },
+  editOut: { color: '#f59e0b', fontSize: 12, fontVariant: ['tabular-nums'] },
+  editDur: { color: '#94a3b8', fontSize: 11, marginLeft: 2 },
+  editAction: { color: '#e2e8f0', fontSize: 12, marginLeft: 10 },
+
   segRow: { height: 20, marginBottom: 4 },
   seg: {
     position: 'absolute',
@@ -332,14 +370,17 @@ const s = StyleSheet.create({
   },
   segActive: { backgroundColor: '#334155' },
   segText: { color: '#cbd5e1', fontSize: 10 },
-  // 不能 overflow:hidden —— 手柄要伸出轨道上下才够大，被裁掉的部分连触摸也收不到
+
   track: { height: 40, backgroundColor: '#1e293b', borderRadius: 6 },
   trackFloat: { height: 20, backgroundColor: 'rgba(30,41,59,0.6)' },
+  clipLayer: { ...StyleSheet.absoluteFillObject, borderRadius: 6, overflow: 'hidden' },
+
   divider: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#475569' },
   clip: { position: 'absolute', top: 4, bottom: 4, backgroundColor: 'rgba(59,130,246,0.8)', borderRadius: 2 },
   clipActive: { backgroundColor: '#22d3ee' },
   pending: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(250,204,21,0.3)' },
   cursor: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#22d3ee' },
+
   handle: {
     position: 'absolute',
     top: -11,
@@ -349,6 +390,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  handleOn: { transform: [{ scale: 1.15 }] },
   handleIn: { backgroundColor: '#22d3ee' },
   handleOut: { backgroundColor: '#f59e0b' },
   handleText: { color: '#0f172a', fontSize: 12, fontWeight: '700' }
