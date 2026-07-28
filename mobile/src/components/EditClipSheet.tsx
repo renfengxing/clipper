@@ -13,17 +13,14 @@ import {
 import { useStore } from '@core/store/useStore'
 import { fmtMs } from '@core/utils/time'
 import { videoOffset } from '@core/utils/timeline'
-import { TrimBar } from './TrimBar'
 
 interface Props {
   clipId: string | null
   onClose: () => void
-  /** 切到时间线上裁剪：那里画面不被弹窗挡住 */
-  onTrimOnTimeline?: (id: string) => void
 }
 
 /** 改片段的标题与标签。标签点一下就切换，也能现打新词 */
-export function EditClipSheet({ clipId, onClose, onTrimOnTimeline }: Props): JSX.Element {
+export function EditClipSheet({ clipId, onClose }: Props): JSX.Element {
   const clips = useStore((s) => s.clips)
   const videoTags = useStore((s) => s.videoTags)
   const updateClipTitle = useStore((s) => s.updateClipTitle)
@@ -143,25 +140,11 @@ export function EditClipSheet({ clipId, onClose, onTrimOnTimeline }: Props): JSX
               multiline
             />
 
-            <View style={[s.gap, s.trimHead]}>
-              <Text style={s.label}>起止时间</Text>
-              {onTrimOnTimeline && (
-                <Pressable
-                  onPress={() => {
-                    onTrimOnTimeline(clip.id)
-                    onClose()
-                  }}
-                >
-                  <Text style={s.trimLink}>在画面上拖 ›</Text>
-                </Pressable>
-              )}
-            </View>
-            <TrimBar clipId={clip.id} />
-            <View style={s.barGap} />
+            <Text style={[s.label, s.gap]}>起止时间微调</Text>
             {timeRow('in')}
             {timeRow('out')}
             <Text style={s.hint}>
-              「取当前」= 把播放头现在的位置设为该端点；点 ± 会同时把画面跳过去，方便对准
+              粗调直接在时间线上拖片段两端的手柄；这里用来做零点几秒的精调
             </Text>
 
             <Text style={[s.label, s.gap]}>标签</Text>
@@ -198,9 +181,6 @@ export function EditClipSheet({ clipId, onClose, onTrimOnTimeline }: Props): JSX
 }
 
 const s = StyleSheet.create({
-  trimHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  trimLink: { color: '#22d3ee', fontSize: 12 },
-  barGap: { height: 12 },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(2,6,23,0.65)', justifyContent: 'flex-end' },
   sheet: {

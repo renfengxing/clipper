@@ -10,7 +10,6 @@ interface Props {
   onExport?: () => void
   onMerge?: () => void
   onEditClip?: (id: string) => void
-  onTrimClip?: (id: string) => void
 }
 
 /** 片段列表：点击=循环播放该片段，长按=删除；多视频时标来源徽标 */
@@ -19,8 +18,7 @@ export function ClipList({
   onReport,
   onExport,
   onMerge,
-  onEditClip,
-  onTrimClip
+  onEditClip
 }: Props = {}): JSX.Element {
   const clips = useStore((s) => s.clips)
   const videos = useStore((s) => s.videos)
@@ -62,7 +60,6 @@ export function ClipList({
     Alert.alert(title || '未命名片段', undefined, [
       { text: '取消', style: 'cancel' },
       ...(onEditClip ? [{ text: '编辑文字和标签', onPress: () => onEditClip(id) }] : []),
-      ...(onTrimClip ? [{ text: '拖拽调整起止点', onPress: () => onTrimClip(id) }] : []),
       { text: '删除', style: 'destructive' as const, onPress: () => deleteClip(id) }
     ])
   }

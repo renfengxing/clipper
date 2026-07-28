@@ -13,6 +13,8 @@ interface TimelineProps {
 
 /** 超过这个位移才算拖拽，否则按「点击」处理 */
 const DRAG_PX = 6
+/** 起止手柄的宽度（同时也是两个手柄的最小间距） */
+const HANDLE = 22
 
 export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const videos = useStore((s) => s.videos)
@@ -28,14 +30,40 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
   const removeVideo = useStore((s) => s.removeVideo)
   const pause = useStore((s) => s.pause)
   const resume = useStore((s) => s.resume)
+  const updateClipTimes = useStore((s) => s.updateClipTimes)
+  const deselectClip = useStore((s) => s.deselectClip)
 
   const [width, setWidth] = useState(0)
   const widthRef = useRef(0)
+  const trackRef = useRef<View>(null)
+  const trackX = useRef(0) // 轨道在窗口里的左边界，用来把 pageX 换算成轨道内坐标
   const total = totalDuration(videos)
 
   // PanResponder 只创建一次，用 ref 读取每次渲染的最新值
-  const ref = useRef({ total, clips, videos, seek, clearPreview, selectClip, pause, resume })
-  ref.current = { total, clips, videos, seek, clearPreview, selectClip, pause, resume }
+  const ref = useRef({
+    total,
+    clips,
+    videos,
+    seek,
+    clearPreview,
+    selectClip,
+    pause,
+    resume,
+    updateClipTimes,
+    deselectClip
+  })
+  ref.current = {
+    total,
+    clips,
+    videos,
+    seek,
+    clearPreview,
+    selectClip,
+    pause,
+    resume,
+    updateClipTimes,
+    deselectClip
+  }
   /** 按下时是否在播 —— 拖完用它决定要不要续播 */
   const wasPlayingRef = useRef(false)
 
@@ -43,6 +71,9 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
     const w = e.nativeEvent.layout.width
     widthRef.current = w
     setWidth(w)
+    trackRef.current?.measureInWindow((x) => {
+      trackX.current = x
+    })
   }
 
   const timeAtX = (x: number): number | null => {
@@ -65,6 +96,43 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
   const movedRef = useRef(false)
   const hitClipRef = useRef<string | null>(null)
+  const selectedIdRef = useRef<string | null>(null)
+  selectedIdRef.current = selectedClipId
+
+  /**
+   * 选中片段后，两端直接长出手柄。
+   * 做在时间线本身而不是另起一个控件：那样既多一层概念，
+   * 又丢掉了「随时拖到任意时间」的能力。
+   */
+  const makeHandle = (which: 'in' | 'out'): ReturnType<typeof PanResponder.create> =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        // 播放头会跟拖动抢位置，先停住并退出片段循环
+        ref.current.pause()
+        ref.current.clearPreview()
+      },
+      onPanResponderMove: (e) => {
+        const { clips: cs, videos: vs, total: tt } = ref.current
+        const c = cs.find((x) => x.id === selectedIdRef.current)
+        const w = widthRef.current
+        if (!c || w <= 0 || tt <= 0) return
+        // 手柄自己就是触摸目标，locationX 会是相对手柄的 —— 必须用 pageX
+        const gx = Math.max(0, Math.min(w, e.nativeEvent.pageX - trackX.current))
+        const g = (gx / w) * tt
+        const off = videoOffset(vs, c.videoId)
+        const localT = g - off
+        const nin = which === 'in' ? Math.max(0, Math.min(localT, c.out - 0.1)) : c.in
+        const nout = which === 'out' ? Math.max(c.in + 0.1, localT) : c.out
+        ref.current.updateClipTimes(c.id, nin, nout)
+        ref.current.seek(off + (which === 'in' ? nin : nout))
+      }
+    })
+
+  const inPan = useRef(makeHandle('in')).current
+  const outPan = useRef(makeHandle('out')).current
 
   const pan = useRef(
     PanResponder.create({
@@ -78,6 +146,7 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         // 按在片段上：先不动，等松手判定为「点击片段」；按在空白处：立刻 scrub
         if (hitClipRef.current == null && t != null) {
           ref.current.clearPreview()
+          ref.current.deselectClip() // 点到片段外 → 退出编辑态，手柄收起
           ref.current.seek(t)
         }
       },
@@ -117,6 +186,22 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
   const pct = (v: number): number => (v / total) * width
   const segs = ordered(videos)
+
+  const sel = clips.find((c) => c.id === selectedClipId) || null
+  let selL = 0
+  let selR = 0
+  if (sel) {
+    selL = pct(localToGlobal(videos, sel.videoId, sel.in))
+    selR = pct(localToGlobal(videos, sel.videoId, sel.out))
+    if (selR - selL < HANDLE) {
+      // 太窄就把两个手柄往两边撑开，位置只是视觉上的，拖动仍按真实时间换算
+      const mid = (selL + selR) / 2
+      selL = mid - HANDLE / 2
+      selR = mid + HANDLE / 2
+    }
+    selL = Math.max(HANDLE / 2, Math.min(selL, width - HANDLE / 2))
+    selR = Math.max(HANDLE / 2, Math.min(selR, width - HANDLE / 2))
+  }
 
   return (
     <View style={[s.wrap, floating && s.wrapFloat]}>
@@ -200,6 +285,25 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
 
         {/* 游标 */}
         <View pointerEvents="none" style={[s.cursor, { left: Math.max(0, pct(currentTime) - 1) }]} />
+
+        {/* 选中片段的起止手柄。片段很窄时两个手柄会叠在一起，
+            所以强制至少留出一个手柄的间距，保证都抓得住 */}
+        {sel && (
+          <>
+            <View
+              style={[s.handle, s.handleIn, { left: selL - HANDLE / 2 }]}
+              {...inPan.panHandlers}
+            >
+              <Text style={s.handleText}>‖</Text>
+            </View>
+            <View
+              style={[s.handle, s.handleOut, { left: selR - HANDLE / 2 }]}
+              {...outPan.panHandlers}
+            >
+              <Text style={s.handleText}>‖</Text>
+            </View>
+          </>
+        )}
       </View>
     </View>
   )
@@ -226,5 +330,17 @@ const s = StyleSheet.create({
   clip: { position: 'absolute', top: 4, bottom: 4, backgroundColor: 'rgba(59,130,246,0.8)', borderRadius: 2 },
   clipActive: { backgroundColor: '#22d3ee' },
   pending: { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(250,204,21,0.3)' },
-  cursor: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#22d3ee' }
+  cursor: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#22d3ee' },
+  handle: {
+    position: 'absolute',
+    top: -7,
+    bottom: -7,
+    width: HANDLE,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  handleIn: { backgroundColor: '#22d3ee' },
+  handleOut: { backgroundColor: '#f59e0b' },
+  handleText: { color: '#0f172a', fontSize: 12, fontWeight: '700' }
 })
