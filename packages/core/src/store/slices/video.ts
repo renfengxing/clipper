@@ -119,11 +119,12 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
           patch.currentTime = 0
         }
         if (cur.length === 0 && added[0]) {
-          // 时间线按"视频"建，避免同目录多场比赛互相串（<视频名>.kkclip）
-          const dir = dirOf(added[0].path)
+          // 时间线按"视频"建，避免同目录多场比赛互相串。
+          // 具体落在哪由平台决定：桌面是视频旁边的 <视频名>.kkclip，
+          // iOS 得进沙盒（相册旁边写不了，缓存目录还会被系统回收）
           const base = stripExt(added[0].fileName)
           patch.timelineName = base
-          patch.timelinePath = dir + '/' + base + '.kkclip'
+          patch.timelinePath = platform().timelineKeyFor(added[0].path)
           patch.projectLoaded = true
           if (tagSet.size === 0) patch.videoTags = [...get().defaultTags]
           void platform().addRecent(patch.timelinePath)
@@ -187,7 +188,7 @@ export const createVideoSlice: StateCreator<AppState, [], [], VideoSlice> = (set
       const dir = dirOf(path)
       const base = stripExt(basename(path))
       // 1) 该视频自己的时间线
-      const videoKk = dir + '/' + base + '.kkclip'
+      const videoKk = platform().timelineKeyFor(path)
       if (await platform().dataExists(videoKk)) {
         await get().openVideoPath(videoKk)
         return

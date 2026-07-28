@@ -139,10 +139,17 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
         </View>
       )}
 
+      {/* 轨道内的装饰层一律 pointerEvents=none：
+          RN 的 locationX 是相对「触摸目标」算的，若点中的是片段色条这类子 View，
+          拿到的就是相对色条自身的坐标，换算出的时间完全不对 —— 表现为点片段跳到开头 */}
       <View style={[s.track, floating && s.trackFloat]} onLayout={onLayout} {...pan.panHandlers}>
         {/* 分段分界线 */}
         {segs.slice(1).map((v) => (
-          <View key={v.id} style={[s.divider, { left: pct(videoOffset(videos, v.id)) }]} />
+          <View
+            key={v.id}
+            pointerEvents="none"
+            style={[s.divider, { left: pct(videoOffset(videos, v.id)) }]}
+          />
         ))}
 
         {/* 已存片段色条 */}
@@ -150,18 +157,25 @@ export function Timeline({ floating }: TimelineProps = {}): JSX.Element | null {
           const left = pct(localToGlobal(videos, c.videoId, c.in))
           const w = Math.max(3, pct(c.out - c.in))
           const on = c.id === selectedClipId
-          return <View key={c.id} style={[s.clip, { left, width: w }, on && s.clipActive]} />
+          return (
+            <View
+              key={c.id}
+              pointerEvents="none"
+              style={[s.clip, { left, width: w }, on && s.clipActive]}
+            />
+          )
         })}
 
         {/* 标记中：起点 → 当前 的黄色高亮 */}
         {markIn != null && markOut == null && currentTime > markIn && (
           <View
+            pointerEvents="none"
             style={[s.pending, { left: pct(markIn), width: Math.max(2, pct(currentTime - markIn)) }]}
           />
         )}
 
         {/* 游标 */}
-        <View style={[s.cursor, { left: Math.max(0, pct(currentTime) - 1) }]} />
+        <View pointerEvents="none" style={[s.cursor, { left: Math.max(0, pct(currentTime) - 1) }]} />
       </View>
     </View>
   )

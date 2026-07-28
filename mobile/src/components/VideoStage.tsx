@@ -19,6 +19,13 @@ type Dir = 'fwd' | 'rev'
 interface Pick {
   dir: Dir
   idx: number // -1 = 还没选中任何档
+  x: number // 手指当前位置（相对 stage），倍率条据此贴在手指旁边
+  y: number
+}
+
+interface Size {
+  w: number
+  h: number
 }
 
 interface Props {
@@ -41,6 +48,8 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   const setSignedRate = useStore((s) => s.setSignedRate)
 
   const [pick, setPick] = useState<Pick | null>(null)
+  const [stage, setStage] = useState<Size>({ w: 0, h: 0 })
+  const [bar, setBar] = useState<Size>({ w: 0, h: 0 })
   const holdRef = useRef(false)
   const movedRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -83,19 +92,21 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4,
-      onPanResponderGrant: () => {
+      onPanResponderGrant: (e) => {
         if (!cbRef.current.enabled) return
         holdRef.current = false
         movedRef.current = false
         // 按住一小会儿 → 进入调速模式（与「快速滑动」区分开）
         clearTimer()
+        const { locationX, locationY } = e.nativeEvent
         timerRef.current = setTimeout(() => {
           holdRef.current = true
-          setPickBoth({ dir: 'fwd', idx: -1 }) // 先亮出正向条做提示，未选中任何档
+          // 先亮出正向条做提示，未选中任何档
+          setPickBoth({ dir: 'fwd', idx: -1, x: locationX, y: locationY })
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
         }, HOLD_MS)
       },
-      onPanResponderMove: (_e, g) => {
+      onPanResponderMove: (e, g) => {
         if (!cbRef.current.enabled) return
         if (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4) movedRef.current = true
         if (!holdRef.current) {
@@ -113,9 +124,11 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
             ? -1
             : Math.max(0, Math.min(list.length - 1, Math.round((dist - DEAD_PX) / STEP_PX)))
         const cur = pickRef.current
-        if (!cur || cur.dir !== dir || cur.idx !== idx) {
-          setPickBoth({ dir, idx })
-          if (idx >= 0) void Haptics.selectionAsync()
+        const x = e.nativeEvent.locationX
+        const y = e.nativeEvent.locationY
+        if (!cur || cur.dir !== dir || cur.idx !== idx || cur.x !== x || cur.y !== y) {
+          setPickBoth({ dir, idx, x, y })
+          if (cur && cur.idx !== idx && idx >= 0) void Haptics.selectionAsync()
         }
       },
       onPanResponderRelease: (_e, g) => {
@@ -148,8 +161,29 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
   const rateList = pick?.dir === 'rev' ? REV : FWD
   const label = (v: number): string => (v < 0 ? `◀${-v}x` : `${v}x`)
 
+  // 倍率条贴在手指的左/右侧（不是屏幕的左右侧），再夹进画面内避免出界
+  const PAD = 10
+  const GAP_PX = 18
+  const rawLeft = pick
+    ? pick.dir === 'fwd'
+      ? pick.x + GAP_PX
+      : pick.x - GAP_PX - bar.w
+    : 0
+  const barPos = {
+    left: Math.max(PAD, Math.min(rawLeft, Math.max(PAD, stage.w - bar.w - PAD))),
+    top: Math.max(PAD, Math.min((pick?.y ?? 0) - bar.h / 2, Math.max(PAD, stage.h - bar.h - PAD))),
+    // 首帧还没量到尺寸，先不显示，避免闪一下再归位
+    opacity: bar.w > 0 ? 1 : 0
+  }
+
   return (
-    <View style={s.stage} {...pan.panHandlers}>
+    <View
+      style={s.stage}
+      onLayout={(e) =>
+        setStage({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
+      }
+      {...pan.panHandlers}
+    >
       {children}
 
       {/* 中央播放/暂停按钮：只在切换播放态后短暂显示。pointerEvents=none，
@@ -163,8 +197,11 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
       {/* 调速条：按住横滑时弹出，左右方向对应两套倍率 */}
       {pick != null && (
         <View
-          style={[s.rateWrap, pick.dir === 'rev' ? s.rateWrapLeft : s.rateWrapRight]}
+          style={[s.rateWrap, barPos]}
           pointerEvents="none"
+          onLayout={(e) =>
+            setBar({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })
+          }
         >
           <View style={s.rateBar}>
             {rateList.map((v, i) => (
@@ -206,10 +243,8 @@ const s = StyleSheet.create({
     justifyContent: 'center'
   },
   centerIcon: { color: 'rgba(255,255,255,0.85)', fontSize: 24 },
-  // 倍率条跟着滑动方向走：右滑贴右侧、左滑贴左侧，手指落点和视线落点一致
+  // 倍率条贴在手指触点旁边（位置在渲染时按触点算）
   rateWrap: { position: 'absolute', alignItems: 'center' },
-  rateWrapLeft: { left: 16 },
-  rateWrapRight: { right: 16 },
   rateBar: {
     flexDirection: 'row',
     gap: 4,

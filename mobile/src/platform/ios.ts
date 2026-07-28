@@ -28,6 +28,11 @@ function safeName(key: string): string {
   return `${tail}_${(h >>> 0).toString(36)}`
 }
 
+/** 用文件名（内含相册资源 id）做稳定 key，跨重装仍能对上同一个视频 */
+function refKey(videoRef: string): string {
+  return safeName(decodeURIComponent(videoRef.split('/').pop() || videoRef))
+}
+
 const DEFAULT_SETTINGS: Settings = {
   deepseek_api_key: '',
   default_tags: ['进球', '助攻', '过人', '射门', '防守', '失误', '扑救', '任意球'],
@@ -110,8 +115,10 @@ export const iosPlatform: Platform = {
   },
 
   // —— 工程数据：一律进沙盒（相册旁边写不了）——
-  clipsKeyFor: (videoRef) => DATA_DIR + safeName(videoRef) + '.clips.json',
-  timelineKeyFor: (videoRef) => DATA_DIR + safeName(videoRef) + '.kkclip.json',
+  // 注意只取文件名做 key：完整路径里含 app 容器 UUID，每次重装都会变，
+  // 拿整条路径做 key 会让重装后的数据全部对不上号
+  clipsKeyFor: (videoRef) => DATA_DIR + refKey(videoRef) + '.clips.json',
+  timelineKeyFor: (videoRef) => DATA_DIR + refKey(videoRef) + '.kkclip.json',
 
   async loadData(key) {
     try {

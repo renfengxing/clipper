@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics'
 import { Video, ResizeMode } from 'expo-av'
 import { useStore, selectActiveVideo } from '@core/store/useStore'
 import { platform } from '@core/ports'
+import { startAutoSave } from '@core/persist/autoSave'
 import { fmtClock, fmtMs } from '@core/utils/time'
 import { totalDuration } from '@core/utils/timeline'
 import { TitleSheet } from './src/components/TitleSheet'
@@ -53,6 +54,9 @@ export default function App(): JSX.Element {
   const [playError, setPlayError] = useState<string | null>(null)
   const [listOpen, setListOpen] = useState(false) // 默认收起，全屏看画面（#4）
   const [videoSheetOpen, setVideoSheetOpen] = useState(false)
+
+  // 片段/时间线自动落盘。此前手机端完全没有保存，退出即丢
+  useEffect(() => startAutoSave(), [])
 
   useEffect(() => {
     platform()
