@@ -42,6 +42,7 @@ export interface TransportSlice {
   speedUp: () => void
   speedDown: () => void
   resetSpeed: () => void
+  setSignedRate: (v: number) => void // 直接设带符号速率：负=倒放，正=正放，0=暂停
   stepFrame: (dir: 1 | -1) => void
   jump: (sec: number) => void
 }

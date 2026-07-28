@@ -12,6 +12,7 @@ import { TitleSheet } from './src/components/TitleSheet'
 import { Timeline } from './src/components/Timeline'
 import { ClipList } from './src/components/ClipList'
 import { Controls } from './src/components/Controls'
+import { VideoStage } from './src/components/VideoStage'
 
 export default function App(): JSX.Element {
   const { width, height } = useWindowDimensions()
@@ -39,7 +40,7 @@ export default function App(): JSX.Element {
 
   const videoRef = useRef<Video>(null)
   const [ready, setReady] = useState(false)
-  const [listOpen, setListOpen] = useState(true)
+  const [listOpen, setListOpen] = useState(false) // 默认收起，全屏看画面（#4）
 
   useEffect(() => {
     platform()
@@ -119,6 +120,9 @@ export default function App(): JSX.Element {
   const elapsed = marking ? currentTime - (markIn ?? 0) : 0
   const rateLabel = playing && rate !== 1 ? `${direction === 'reverse' ? '◀ ' : ''}${rate}x` : null
 
+  // 快速右滑=收起列表，快速左滑=展开（与「按住调速」区分）
+  const onFlick = (dir: 'left' | 'right'): void => setListOpen(dir === 'left')
+
   const onMarkPress = (): void => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     if (markIn == null) setMarkIn()
@@ -187,7 +191,7 @@ export default function App(): JSX.Element {
       <SafeAreaView style={s.root} edges={['top', 'bottom', 'left', 'right']}>
         <StatusBar style="light" hidden />
         <View style={s.landRow}>
-          <View style={s.landVideo}>
+          <VideoStage onFlick={onFlick} enabled={!!active}>
             {videoEl}
             {markingOverlay}
 
@@ -210,7 +214,7 @@ export default function App(): JSX.Element {
               <Timeline floating />
               <Controls floating onPickVideos={() => void chooseAndAddVideos()} />
             </View>
-          </View>
+          </VideoStage>
 
           {listOpen ? (
             <View style={s.landList}>
@@ -230,10 +234,12 @@ export default function App(): JSX.Element {
   // ——— 竖屏：上下堆叠，适合单手快速标记 ———
   return (
     <SafeAreaView style={s.root}>
-      <StatusBar style="light" />
+      <StatusBar style="light" hidden />
       <View style={s.portVideo}>
-        {videoEl}
-        {markingOverlay}
+        <VideoStage onFlick={onFlick} enabled={!!active}>
+          {videoEl}
+          {markingOverlay}
+        </VideoStage>
       </View>
       <View style={s.infoRow}>
         {statusText}

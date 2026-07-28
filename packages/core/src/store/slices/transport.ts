@@ -198,6 +198,9 @@ export const createTransportSlice: StateCreator<AppState, [], [], TransportSlice
       applySigned(inSlow ? SLOW[(SLOW.indexOf(rate) + 1) % SLOW.length] : SLOW[0])
     },
 
+    // 手机端「按住滑动选倍率」用：直接指定带符号速率
+    setSignedRate: (v) => applySigned(v),
+
     stepFrame: (dir) => {
       const { videos, activeVideoId } = get()
       const v = videos.find((x) => x.id === activeVideoId)
