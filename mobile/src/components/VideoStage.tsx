@@ -3,9 +3,12 @@ import { View, Text, StyleSheet, PanResponder, Animated } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import { useStore } from '@core/store/useStore'
 
-/** 向右滑：慢放 → 正常 → 快进（手指越往右，越靠倍率条右端） */
+/**
+ * 两条倍率梯都按「离落点由近及远」排列，于是手指往哪边滑、高亮就往哪边走：
+ * 右滑用 FWD（渲染顺序即数组顺序），左滑用 REV（渲染时反转，最快的排在最左）。
+ */
 const FWD = [0.1, 0.25, 0.5, 1, 2, 4, 8]
-/** 向左滑：快退（倒放是手动回退帧，太高倍率会很卡，封顶 4x） */
+/** 倒放是手动回退帧，倍率太高会很卡，封顶 4x */
 const REV = [-1, -2, -4]
 
 const STEP_PX = 38 // 每档所需位移
@@ -114,15 +117,14 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
           if (Math.abs(g.vx) > FLICK_V) clearTimer()
           return
         }
-        // 调速模式：滑动方向决定用哪条倍率梯，位移(+速度加成)决定停在哪一档
-        const boosted = g.dx + g.vx * 90
-        const dir: Dir = boosted >= 0 ? 'fwd' : 'rev'
+        // 调速模式：滑动方向决定用哪条倍率梯，位移决定停在哪一档。
+        // 这里只用 dx，不再掺速度加成 —— vx 抖一下档位就乱跳；
+        // 到头也不 clamp，改成回绕，滑到底继续滑会从最近的一档重新开始
+        const dir: Dir = g.dx >= 0 ? 'fwd' : 'rev'
         const list = dir === 'fwd' ? FWD : REV
-        const dist = Math.abs(boosted)
-        const idx =
-          dist < DEAD_PX
-            ? -1
-            : Math.max(0, Math.min(list.length - 1, Math.round((dist - DEAD_PX) / STEP_PX)))
+        const dist = Math.abs(g.dx)
+        const steps = dist < DEAD_PX ? -1 : Math.floor((dist - DEAD_PX) / STEP_PX)
+        const idx = steps < 0 ? -1 : steps % list.length
         const cur = pickRef.current
         if (!cur) return
         // 位置锚定在按下的落点，不跟着手指漂：滑动只改变贴哪一侧和高亮档位
@@ -158,13 +160,17 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
     })
   ).current
 
-  const rateList = pick?.dir === 'rev' ? REV : FWD
+  // 左侧梯反着渲染：最快的 ◀4x 排最左，于是手指往左滑高亮也往左走
+  const isRev = pick?.dir === 'rev'
+  const rateList = isRev ? [...REV].reverse() : FWD
+  const hotIdx = pick == null || pick.idx < 0 ? -1 : isRev ? REV.length - 1 - pick.idx : pick.idx
   const label = (v: number): string => (v < 0 ? `◀${-v}x` : `${v}x`)
 
   // 倍率条锚定在「按下的落点」旁边（不是屏幕边、也不跟手漂）：
   // 右滑贴落点右侧、左滑贴左侧，只在换方向时整体挪一次，再夹进画面内避免出界
   const PAD = 10
   const GAP_PX = 18
+  const ABOVE_PX = 26 // 抬到触点上方，免得被手指和手掌盖住
   const rawLeft = pick
     ? pick.dir === 'fwd'
       ? pick.x + GAP_PX
@@ -172,7 +178,10 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
     : 0
   const barPos = {
     left: Math.max(PAD, Math.min(rawLeft, Math.max(PAD, stage.w - bar.w - PAD))),
-    top: Math.max(PAD, Math.min((pick?.y ?? 0) - bar.h / 2, Math.max(PAD, stage.h - bar.h - PAD))),
+    top: Math.max(
+      PAD,
+      Math.min((pick?.y ?? 0) - bar.h - ABOVE_PX, Math.max(PAD, stage.h - bar.h - PAD))
+    ),
     // 首帧还没量到尺寸，先不显示，避免闪一下再归位
     opacity: bar.w > 0 ? 1 : 0
   }
@@ -206,8 +215,8 @@ export function VideoStage({ children, onFlick, enabled }: Props): JSX.Element {
         >
           <View style={s.rateBar}>
             {rateList.map((v, i) => (
-              <View key={v} style={[s.rateItem, i === pick.idx && s.rateItemOn]}>
-                <Text style={[s.rateText, i === pick.idx && s.rateTextOn]}>{label(v)}</Text>
+              <View key={v} style={[s.rateItem, i === hotIdx && s.rateItemOn]}>
+                <Text style={[s.rateText, i === hotIdx && s.rateTextOn]}>{label(v)}</Text>
               </View>
             ))}
           </View>
